@@ -1,10 +1,15 @@
-window.ContentstackUIExtension.init().then(async (extension) => {
+// Wait for DOM to be fully loaded before initializing
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initExtension);
+} else {
+  initExtension();
+}
+
+async function initExtension() {
+  const extension = await window.ContentstackUIExtension.init();
   const field = extension.field;
   const btn = document.getElementById("createEntryBtn");
   const valueBox = document.getElementById("selectedValue");
-
-  // Adjust height
-  extension.window.updateHeight();
 
   // Load existing stored data
   const initValue = await field.getData();
@@ -50,4 +55,9 @@ window.ContentstackUIExtension.init().then(async (extension) => {
     valueBox.style.display = "block";
     valueBox.innerHTML = "<b>Selected Entry UID:</b><br>" + JSON.stringify(val);
   }
-});
+
+  // Adjust height after content is loaded
+  setTimeout(() => {
+    extension.window.updateHeight();
+  }, 100);
+}
