@@ -1,36 +1,53 @@
-window.ContentstackUIExtension.init().then(function (extension) {
+window.ContentstackUIExtension.init().then(async (extension) => {
+  const field = extension.field;
   const btn = document.getElementById("createEntryBtn");
-  const selectedBox = document.getElementById("selectedValue");
+  const valueBox = document.getElementById("selectedValue");
 
-  // Resize extension height
-  extension.window.updateHeight(300);
+  // Adjust height
+  extension.window.updateHeight();
 
-  // Show already saved value
-  const saved = extension.field.getValue();
-  if (saved) {
-    selectedBox.style.display = "block";
-    selectedBox.innerHTML = "Selected Entry UID: " + saved;
+  // Load existing stored data
+  const initValue = await field.getData();
+  if (initValue) {
+    showValue(initValue);
   }
 
-  btn.addEventListener("click", async () => {
-    try {
-      // Open the Contentstack create-entry popup
-      const result = await extension.stack.OpenCreateEntry({
-        contentTypeUid: "blog" // TODO: change to your content type
-      });
+  btn.onclick = async () => {
+    const stack = extension.stack;
 
-      if (result && result.data && result.data.entry && result.data.entry.uid) {
-        const uid = result.data.entry.uid;
+    // Read content type uid from extension config
+    const refCtUid = extension.config.content_type_uid;
 
-        // Save value to field
-        extension.field.setValue(uid);
-
-        // Update UI
-        selectedBox.style.display = "block";
-        selectedBox.innerHTML = "Selected Entry UID: " + uid;
-      }
-    } catch (err) {
-      console.error("Failed to open popup:", err);
+    if (!refCtUid) {
+      alert("ERROR: Missing content_type_uid in extension configuration.");
+      return;
     }
-  });
+
+    // Open "Create Entry" popup
+    const res = await stack.createEntry(refCtUid, {
+      locale: extension.locale
+    });
+
+    if (!res || !res.data || !res.data.entry) {
+      alert("Entry creation failed.");
+      return;
+    }
+
+    const entryUid = res.data.entry.uid;
+
+    // Save reference value
+    await field.setData([
+      {
+        uid: entryUid,
+        _content_type: refCtUid
+      }
+    ]);
+
+    showValue(entryUid);
+  };
+
+  function showValue(val) {
+    valueBox.style.display = "block";
+    valueBox.innerHTML = "<b>Selected Entry UID:</b><br>" + JSON.stringify(val);
+  }
 });
