@@ -1,0 +1,13 @@
+{
+  "title": "Create-only Reference Field",
+  "type": "field",
+  "field_types": [
+    "reference"
+  ],
+  "description": "Replace the default reference field UI: hide 'Choose existing entry' and show 'Create new entry' popup.",
+  "meta": {
+    "author": "your-name"
+  },
+  "src": "https://YOUR_HOSTING_URL/index.html",
+  "config": {}
+}

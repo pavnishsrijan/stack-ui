@@ -1,0 +1,5 @@
+body{font-family:system-ui,Segoe UI,Roboto,Arial;margin:8px}
+#info{font-size:13px;color:#444;margin-bottom:8px}
+#controls{display:flex;flex-direction:column;gap:8px}
+button{padding:8px 12px;border-radius:6px;border:1px solid #ccc;background:#fff}
+#selected-entry{font-size:13px;color:#222}

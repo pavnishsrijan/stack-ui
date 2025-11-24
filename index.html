@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Create-only Reference Field</title>
+  <link rel="stylesheet" href="/style.css" />
+  <!-- TODO: Replace the SDK src below if your org provides a different CDN/version -->
+  <script src="https://unpkg.com/@contentstack/ui-extensions-sdk@latest/dist/index.umd.js"></script>
+</head>
+<body>
+  <div id="app">
+    <div id="info">Initializing...</div>
+    <div id="controls" style="display:none">
+      <div id="selected-entry"></div>
+      <button id="create-entry">Create new entry</button>
+      <button id="open-existing" style="display:none">Choose existing (hidden)</button>
+    </div>
+  </div>
+  <script src="/main.js"></script>
+</body>
+</html>
