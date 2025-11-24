@@ -191,63 +191,35 @@ ContentstackUIExtension.init().then(function(extension) {
       });
   }
 
-  // Create entry - Fetch schema and show form modal
+  // Create entry - Show form modal with common fields
   function createEntry(contentTypeUid) {
     console.log("Creating entry for:", contentTypeUid);
-
-    // Show loading
-    var loading = document.createElement('div');
-    loading.innerHTML = '⏳ Loading content type schema...';
-    loading.id = 'schemaLoading';
-    loading.style.cssText = 'position: fixed; top: 16px; right: 16px; background: #647de8; color: white; padding: 12px 20px; border-radius: 4px; font-weight: 500; font-size: 13px; z-index: 100000; box-shadow: 0 4px 12px rgba(0,0,0,0.15);';
-    document.body.appendChild(loading);
-
-    // Fetch content type schema to get all fields
-    extension.stack.ContentType(contentTypeUid).fetch()
-      .then(function(contentType) {
-        console.log("Content type schema:", contentType);
-
-        // Remove loading
-        if (document.getElementById('schemaLoading')) {
-          document.body.removeChild(loading);
-        }
-
-        // Show entry creation form with all fields from schema
-        showEntryCreationForm(contentTypeUid, contentType);
-      })
-      .catch(function(error) {
-        console.error("Error fetching content type:", error);
-
-        // Remove loading
-        if (document.getElementById('schemaLoading')) {
-          document.body.removeChild(loading);
-        }
-
-        // Fallback: show basic form with common fields
-        console.log("Falling back to basic form");
-        showBasicEntryForm(contentTypeUid);
-      });
+    showEntryCreationForm(contentTypeUid);
   }
 
-  // Show entry creation form with dynamic fields from schema
-  function showEntryCreationForm(contentTypeUid, contentType) {
-    var schema = contentType.schema || [];
-    console.log("Building form with", schema.length, "fields");
+  // Show entry creation form with common fields
+  function showEntryCreationForm(contentTypeUid) {
+    console.log("Showing entry creation form for:", contentTypeUid);
 
     // Create modal
     var modal = document.createElement('div');
     modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.7); z-index: 99999; display: flex; align-items: center; justify-content: center; overflow: auto;';
 
     var container = document.createElement('div');
-    container.style.cssText = 'background: white; width: 90%; max-width: 800px; max-height: 90vh; display: flex; flex-direction: column; border-radius: 6px; box-shadow: 0 4px 20px rgba(0,0,0,0.3);';
+    container.style.cssText = 'background: white; width: 90%; max-width: 700px; max-height: 90vh; display: flex; flex-direction: column; border-radius: 6px; box-shadow: 0 4px 20px rgba(0,0,0,0.3);';
 
     // Header
     var header = document.createElement('div');
     header.style.cssText = 'padding: 20px 24px; border-bottom: 1px solid #e4e8ed; display: flex; justify-content: space-between; align-items: center; background: #fff;';
 
     var title = document.createElement('h2');
-    title.textContent = 'Create New ' + (contentType.title || contentTypeUid);
+    title.textContent = 'Create New Entry';
     title.style.cssText = 'margin: 0; font-size: 18px; font-weight: 600; color: #1f2937;';
+
+    var badge = document.createElement('span');
+    badge.textContent = contentTypeUid;
+    badge.style.cssText = 'padding: 4px 10px; background: #f0f3ff; color: #647de8; border-radius: 4px; font-size: 12px; font-weight: 500; margin-left: 12px;';
+    title.appendChild(badge);
 
     var closeBtn = document.createElement('button');
     closeBtn.innerHTML = '✕';
@@ -262,25 +234,32 @@ ContentstackUIExtension.init().then(function(extension) {
     formContainer.style.cssText = 'padding: 24px; overflow-y: auto; flex: 1;';
 
     var form = document.createElement('form');
-    form.id = 'dynamicEntryForm';
+    form.id = 'entryCreationForm';
 
-    // Build fields from schema
-    schema.forEach(function(fieldSchema) {
-      if (fieldSchema.uid === 'uid' || fieldSchema.uid === 'created_at' || fieldSchema.uid === 'updated_at') {
-        return; // Skip system fields
-      }
+    // Common fields that most content types have
+    var commonFields = [
+      { label: 'Title *', name: 'title', type: 'text', required: true, placeholder: 'Enter title' },
+      { label: 'URL', name: 'url', type: 'text', placeholder: 'e.g., /my-page' },
+      { label: 'Description', name: 'description', type: 'textarea', rows: 3, placeholder: 'Enter description' }
+    ];
 
-      var fieldGroup = createDynamicField(fieldSchema);
-      if (fieldGroup) {
-        form.appendChild(fieldGroup);
-      }
+    commonFields.forEach(function(fieldConfig) {
+      var fieldGroup = createSimpleField(fieldConfig);
+      form.appendChild(fieldGroup);
     });
 
     formContainer.appendChild(form);
 
     // Footer
     var footer = document.createElement('div');
-    footer.style.cssText = 'padding: 16px 24px; border-top: 1px solid #e4e8ed; display: flex; justify-content: flex-end; gap: 12px; background: #f7f9fc;';
+    footer.style.cssText = 'padding: 16px 24px; border-top: 1px solid #e4e8ed; display: flex; justify-content: space-between; align-items: center; gap: 12px; background: #f7f9fc;';
+
+    var infoText = document.createElement('div');
+    infoText.textContent = '* Required fields';
+    infoText.style.cssText = 'font-size: 12px; color: #647696;';
+
+    var buttonGroup = document.createElement('div');
+    buttonGroup.style.cssText = 'display: flex; gap: 10px;';
 
     var cancelBtn = document.createElement('button');
     cancelBtn.textContent = 'Cancel';
@@ -292,10 +271,13 @@ ContentstackUIExtension.init().then(function(extension) {
     saveBtn.innerHTML = '💾 Save & Add to Field';
     saveBtn.type = 'button';
     saveBtn.className = 'cs-btn cs-btn-primary';
-    saveBtn.onclick = function() { submitDynamicEntry(contentTypeUid, form, modal, saveBtn); };
+    saveBtn.onclick = function() { submitEntry(contentTypeUid, form, modal, saveBtn); };
 
-    footer.appendChild(cancelBtn);
-    footer.appendChild(saveBtn);
+    buttonGroup.appendChild(cancelBtn);
+    buttonGroup.appendChild(saveBtn);
+
+    footer.appendChild(infoText);
+    footer.appendChild(buttonGroup);
 
     container.appendChild(header);
     container.appendChild(formContainer);
@@ -305,9 +287,122 @@ ContentstackUIExtension.init().then(function(extension) {
 
     // Focus first input
     setTimeout(function() {
-      var firstInput = form.querySelector('input, textarea');
+      var firstInput = form.querySelector('input');
       if (firstInput) firstInput.focus();
     }, 100);
+
+    // ESC to close
+    var escHandler = function(e) {
+      if (e.key === 'Escape') {
+        document.body.removeChild(modal);
+        document.removeEventListener('keydown', escHandler);
+      }
+    };
+    document.addEventListener('keydown', escHandler);
+  }
+
+  // Create simple form field
+  function createSimpleField(config) {
+    var group = document.createElement('div');
+    group.style.cssText = 'margin-bottom: 20px;';
+
+    var label = document.createElement('label');
+    label.textContent = config.label;
+    label.style.cssText = 'display: block; margin-bottom: 8px; font-weight: 500; font-size: 13px; color: #475161;';
+
+    var input;
+    if (config.type === 'textarea') {
+      input = document.createElement('textarea');
+      input.rows = config.rows || 4;
+    } else {
+      input = document.createElement('input');
+      input.type = config.type || 'text';
+    }
+
+    input.name = config.name;
+    input.required = config.required || false;
+    input.placeholder = config.placeholder || '';
+    input.style.cssText = 'width: 100%; padding: 10px 12px; border: 1px solid #dfe3e8; border-radius: 4px; font-size: 13px; color: #1f2937; font-family: inherit;';
+
+    // Focus effect
+    input.onfocus = function() {
+      this.style.borderColor = '#647de8';
+      this.style.boxShadow = '0 0 0 2px rgba(100, 125, 232, 0.1)';
+    };
+    input.onblur = function() {
+      this.style.borderColor = '#dfe3e8';
+      this.style.boxShadow = 'none';
+    };
+
+    group.appendChild(label);
+    group.appendChild(input);
+
+    return group;
+  }
+
+  // Submit entry
+  function submitEntry(contentTypeUid, form, modal, saveBtn) {
+    var formData = new FormData(form);
+    var entryData = { entry: {} };
+
+    for (var pair of formData.entries()) {
+      if (pair[1]) entryData.entry[pair[0]] = pair[1];
+    }
+
+    if (!entryData.entry.title) {
+      alert('Title is required');
+      return;
+    }
+
+    console.log('Creating entry:', entryData);
+
+    // Show loading
+    saveBtn.innerHTML = '⏳ Creating...';
+    saveBtn.disabled = true;
+    saveBtn.style.opacity = '0.7';
+
+    extension.stack.ContentType(contentTypeUid).Entry.create(entryData)
+      .then(function(result) {
+        console.log('Entry created:', result);
+
+        var entry = result[0];
+        var newEntry = {
+          uid: entry.uid,
+          _content_type_uid: contentTypeUid
+        };
+
+        // Add to field
+        if (isMultiple) {
+          currentData.push(newEntry);
+        } else {
+          currentData = [newEntry];
+        }
+
+        return field.setData(currentData);
+      })
+      .then(function() {
+        document.body.removeChild(modal);
+        renderEntries();
+        extension.window.updateHeight();
+
+        // Success notification
+        var success = document.createElement('div');
+        success.innerHTML = '✓ Entry created and added successfully!';
+        success.style.cssText = 'position: fixed; top: 16px; right: 16px; background: #10b981; color: white; padding: 12px 20px; border-radius: 4px; font-weight: 500; font-size: 13px; z-index: 100000; box-shadow: 0 4px 12px rgba(0,0,0,0.15);';
+        document.body.appendChild(success);
+        setTimeout(function() {
+          if (document.body.contains(success)) {
+            document.body.removeChild(success);
+          }
+        }, 3000);
+      })
+      .catch(function(error) {
+        console.error('Error:', error);
+        alert('Error: ' + (error.error_message || error.message || 'Failed to create entry'));
+        saveBtn.innerHTML = '💾 Save & Add to Field';
+        saveBtn.disabled = false;
+        saveBtn.style.opacity = '1';
+      });
   }
 
   // Create dynamic field based on schema
