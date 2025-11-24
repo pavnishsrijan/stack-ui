@@ -6,8 +6,14 @@
   <title>Create Only Reference Field</title>
 
   <!-- Contentstack UI Extensions SDK -->
-  <script src="https://unpkg.com/@contentstack/ui-extensions-sdk@2.2.0/dist/ui-extension-sdk.js"></script>
-  <link href="https://unpkg.com/@contentstack/ui-extensions-sdk@2.2.0/dist/ui-extension-sdk.css" rel="stylesheet">
+  <script src="https://unpkg.com/@contentstack/ui-extensions-sdk@2.2.3/dist/ui-extension-sdk.js"
+          integrity="sha512-LMktiFAj7j/AUFctMlgY8qmLrLIQVctwwCsnCXIWnvgF9JlanilvFbZxOCtPNB5eO3vp2Nhw9ED1UsWa+ltSvQ=="
+          crossorigin="anonymous"></script>
+  <link rel="stylesheet"
+        type="text/css"
+        href="https://unpkg.com/@contentstack/ui-extensions-sdk@2.2.3/dist/ui-extension-sdk.css"
+        integrity="sha512-yPPI/jWiqPr0HIh+1A2QPP5p58sSYqbPoBykxIuBckT1vzGwNbrOmwYM03qGI4ffnxd7q4kkoDys0kdZzxYn9A=="
+        crossorigin="anonymous" />
 
   <style>
     body {
@@ -35,9 +41,6 @@
       font-size: 14px;
     }
   </style>
-
-  <!-- Initialize extension in head to register handlers early -->
-  <script src="./app.js"></script>
 </head>
 
 <body>
@@ -46,5 +49,8 @@
   <button id="createEntryBtn">Create New Entry</button>
 
   <div id="selectedValue" class="value-box" style="display:none;"></div>
+
+  <!-- Initialize extension AFTER body -->
+  <script src="./app.js"></script>
 </body>
 </html>
