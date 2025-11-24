@@ -1,22 +1,48 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Create-only Reference Field</title>
-  <link rel="stylesheet" href="/style.css" />
-  <!-- TODO: Replace the SDK src below if your org provides a different CDN/version -->
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Create Only Reference Field</title>
+
+  <!-- Correct Contentstack UI Extensions SDK -->
   <script src="https://unpkg.com/@contentstack/ui-extensions-sdk@2.2.3/dist/ui-extension-sdk.js"></script>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 16px;
+      margin: 0;
+    }
+    button {
+      padding: 10px 18px;
+      background: #0052cc;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    button:hover {
+      background: #003fa3;
+    }
+    .value-box {
+      margin-top: 15px;
+      padding: 10px;
+      background: #f5f5f5;
+      border-radius: 6px;
+      font-size: 14px;
+    }
+  </style>
 </head>
+
 <body>
-  <div id="app">
-    <div id="info">Initializing...</div>
-    <div id="controls" style="display:none">
-      <div id="selected-entry"></div>
-      <button id="create-entry">Create new entry</button>
-      <button id="open-existing" style="display:none">Choose existing (hidden)</button>
-    </div>
-  </div>
-  <script src="/main.js"></script>
+  <h3>Create Only Reference Field</h3>
+
+  <button id="createEntryBtn">Create New Entry</button>
+
+  <div id="selectedValue" class="value-box" style="display:none;"></div>
+
+  <script src="./app.js"></script>
 </body>
 </html>
