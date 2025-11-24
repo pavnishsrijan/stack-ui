@@ -73,37 +73,62 @@ ContentstackUIExtension.init().then(function(extension) {
   function checkForNewlyCreatedEntry() {
     try {
       var savedState = localStorage.getItem('cs_ref_field_creating');
-      if (savedState) {
-        var state = JSON.parse(savedState);
-        console.log("Detected return from entry creation:", state);
-
-        // Check if it's recent (within last 5 minutes)
-        var timeDiff = Date.now() - state.timestamp;
-        if (timeDiff > 5 * 60 * 1000) {
-          localStorage.removeItem('cs_ref_field_creating');
-          return;
-        }
-
-        // Clear the state
-        localStorage.removeItem('cs_ref_field_creating');
-
-        // Query for the latest entry from the content type
-        queryLatestEntryAndAdd(state.contentType);
+      if (!savedState) {
+        console.log("No pending entry creation state found");
+        return;
       }
+
+      var state = JSON.parse(savedState);
+      console.log("Found entry creation state:", state);
+
+      // Check if it's recent (within last 30 minutes)
+      var timeDiff = Date.now() - state.timestamp;
+      if (timeDiff > 30 * 60 * 1000) {
+        console.log("State is too old, removing");
+        localStorage.removeItem('cs_ref_field_creating');
+        return;
+      }
+
+      // Check if we're in the same parent entry
+      var currentEntryUid = extension.entry.getData().uid || 'new';
+      if (state.parentEntryUid !== currentEntryUid) {
+        console.log("Different parent entry, skipping");
+        return;
+      }
+
+      console.log("Returning from entry creation - querying latest entry");
+
+      // Clear the state immediately to prevent duplicate processing
+      localStorage.removeItem('cs_ref_field_creating');
+
+      // Query for the latest entry from the content type
+      queryLatestEntryAndAdd(state.contentType);
     } catch(e) {
-      console.warn("Could not check state:", e);
+      console.error("Error checking state:", e);
     }
   }
 
   // Query latest entry and add to field
   function queryLatestEntryAndAdd(contentTypeUid) {
-    console.log("Querying latest entry from:", contentTypeUid);
+    console.log("Querying latest entry from content type:", contentTypeUid);
+
+    // Show loading indicator
+    var loading = document.createElement('div');
+    loading.innerHTML = '⏳ Loading created entry...';
+    loading.id = 'loadingIndicator';
+    loading.style.cssText = 'position: fixed; top: 16px; right: 16px; background: #647de8; color: white; padding: 12px 20px; border-radius: 4px; font-weight: 500; font-size: 13px; z-index: 100000; box-shadow: 0 4px 12px rgba(0,0,0,0.15);';
+    document.body.appendChild(loading);
 
     extension.stack.ContentType(contentTypeUid).Entry.Query()
       .limit(1)
       .descending('created_at')
       .find()
       .then(function(result) {
+        // Remove loading indicator
+        if (document.getElementById('loadingIndicator')) {
+          document.body.removeChild(loading);
+        }
+
         if (result && result[0] && result[0][0]) {
           var latestEntry = result[0][0];
           console.log("Latest entry found:", latestEntry);
@@ -121,30 +146,46 @@ ContentstackUIExtension.init().then(function(extension) {
             });
             if (!exists) {
               currentData.push(newEntry);
+              console.log("Added new entry to multiple reference field");
+            } else {
+              console.log("Entry already exists in field");
             }
           } else {
             currentData = [newEntry];
+            console.log("Set single reference field");
           }
 
           field.setData(currentData).then(function() {
+            console.log("Field data saved successfully");
             renderEntries();
             extension.window.updateHeight();
 
             // Show success notification
             var success = document.createElement('div');
-            success.innerHTML = '✓ Entry added to field successfully';
+            success.innerHTML = '✓ Entry "' + (latestEntry.title || latestEntry.uid) + '" added successfully!';
             success.style.cssText = 'position: fixed; top: 16px; right: 16px; background: #10b981; color: white; padding: 12px 20px; border-radius: 4px; font-weight: 500; font-size: 13px; z-index: 100000; box-shadow: 0 4px 12px rgba(0,0,0,0.15);';
             document.body.appendChild(success);
             setTimeout(function() {
               if (document.body.contains(success)) {
                 document.body.removeChild(success);
               }
-            }, 2500);
+            }, 3500);
+          }).catch(function(err) {
+            console.error("Error saving field data:", err);
+            alert("Error: Could not save entry to field - " + err.message);
           });
+        } else {
+          console.log("No entries found for content type:", contentTypeUid);
+          alert("No entry found. Please make sure you saved the entry before navigating back.");
         }
       })
       .catch(function(error) {
+        // Remove loading indicator
+        if (document.getElementById('loadingIndicator')) {
+          document.body.removeChild(loading);
+        }
         console.error("Error querying entries:", error);
+        alert("Error querying entries: " + (error.error_message || error.message));
       });
   }
 
