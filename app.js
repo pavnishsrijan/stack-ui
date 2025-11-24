@@ -45,29 +45,43 @@ ContentstackUIExtension.init().then(function(extension) {
 
   // Create entry in specified content type - Open Contentstack's native form
   function createEntry(contentTypeUid) {
-    // Get stack configuration
-    var apiKey = extension.stack._connection.stack.api_key;
-    var orgUid = extension.stack._connection.stack.org_uid;
+    // Get stack API key from current URL
+    var currentUrl = window.parent.location.href;
+    var apiKeyMatch = currentUrl.match(/stack\/([^\/]+)/);
+    var apiKey = apiKeyMatch ? apiKeyMatch[1] : null;
+
+    // Fallback: try to get from extension.stack
+    if (!apiKey && extension.stack && extension.stack._data) {
+      apiKey = extension.stack._data.api_key;
+    }
 
     console.log("Opening create form for:", contentTypeUid);
     console.log("API Key:", apiKey);
-    console.log("Org UID:", orgUid);
+    console.log("Stack object:", extension.stack);
+
+    if (!apiKey) {
+      alert("Could not determine stack API key. Please check console.");
+      console.error("Stack object structure:", extension.stack);
+      return;
+    }
+
+    var locale = extension.locale || 'en-us';
 
     // Build Contentstack entry creation URL
-    var baseUrl = window.location.origin; // https://app.contentstack.com
-    var createUrl = baseUrl + "#!/stack/" + apiKey + "/content-type/" + contentTypeUid + "/en-us/entry/create";
+    var baseUrl = window.parent.location.origin; // https://app.contentstack.com
+    var createUrl = baseUrl + "#!/stack/" + apiKey + "/content-type/" + contentTypeUid + "/" + locale + "/entry/create";
 
     console.log("Opening URL:", createUrl);
 
-    // Open in modal/popup
+    // Open in popup via parent window
     var width = 1200;
     var height = 800;
     var left = (screen.width - width) / 2;
     var top = (screen.height - height) / 2;
 
-    var popup = window.open(
+    var popup = window.parent.open(
       createUrl,
-      'createEntry',
+      'createEntry_' + Date.now(),
       'width=' + width + ',height=' + height + ',left=' + left + ',top=' + top + ',toolbar=no,location=no,status=no,menubar=no,scrollbars=yes,resizable=yes'
     );
 
@@ -78,31 +92,36 @@ ContentstackUIExtension.init().then(function(extension) {
 
     // Poll for popup close and get created entry
     var pollTimer = setInterval(function() {
-      if (popup.closed) {
-        clearInterval(pollTimer);
-        console.log("Popup closed - user may have created an entry");
+      try {
+        if (popup.closed) {
+          clearInterval(pollTimer);
+          console.log("Popup closed - user may have created an entry");
 
-        // Show input to manually add entry UID
-        setTimeout(function() {
-          var entryUid = prompt("Entry created! Please paste the Entry UID here to add it to this field:");
-          if (entryUid && entryUid.trim()) {
-            var newEntry = {
-              uid: entryUid.trim(),
-              _content_type_uid: contentTypeUid
-            };
+          // Show input to manually add entry UID
+          setTimeout(function() {
+            var entryUid = prompt("Entry created! Please paste the Entry UID here to add it to this field:");
+            if (entryUid && entryUid.trim()) {
+              var newEntry = {
+                uid: entryUid.trim(),
+                _content_type_uid: contentTypeUid
+              };
 
-            if (isMultiple) {
-              currentData.push(newEntry);
-            } else {
-              currentData = [newEntry];
+              if (isMultiple) {
+                currentData.push(newEntry);
+              } else {
+                currentData = [newEntry];
+              }
+
+              field.setData(currentData).then(function() {
+                renderEntries();
+                extension.window.updateHeight();
+              });
             }
-
-            field.setData(currentData).then(function() {
-              renderEntries();
-              extension.window.updateHeight();
-            });
-          }
-        }, 500);
+          }, 500);
+        }
+      } catch (e) {
+        // Popup might be on different domain
+        clearInterval(pollTimer);
       }
     }, 500);
   }
@@ -147,11 +166,24 @@ ContentstackUIExtension.init().then(function(extension) {
 
   // Open entry for editing
   function openEntry(contentTypeUid, entryUid) {
-    var apiKey = extension.stack._connection.stack.api_key;
+    // Get stack API key from current URL
+    var currentUrl = window.parent.location.href;
+    var apiKeyMatch = currentUrl.match(/stack\/([^\/]+)/);
+    var apiKey = apiKeyMatch ? apiKeyMatch[1] : null;
+
+    if (!apiKey && extension.stack && extension.stack._data) {
+      apiKey = extension.stack._data.api_key;
+    }
+
+    if (!apiKey) {
+      alert("Could not determine stack API key.");
+      return;
+    }
+
     var locale = extension.locale || 'en-us';
 
     // Build Contentstack entry edit URL
-    var baseUrl = window.location.origin;
+    var baseUrl = window.parent.location.origin;
     var editUrl = baseUrl + "#!/stack/" + apiKey + "/content-type/" + contentTypeUid + "/" + locale + "/entry/" + entryUid + "/edit";
 
     console.log("Opening edit URL:", editUrl);
@@ -162,7 +194,7 @@ ContentstackUIExtension.init().then(function(extension) {
     var left = (screen.width - width) / 2;
     var top = (screen.height - height) / 2;
 
-    var popup = window.open(
+    var popup = window.parent.open(
       editUrl,
       'editEntry_' + entryUid,
       'width=' + width + ',height=' + height + ',left=' + left + ',top=' + top + ',toolbar=no,location=no,status=no,menubar=no,scrollbars=yes,resizable=yes'
