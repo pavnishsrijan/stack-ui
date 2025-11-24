@@ -223,7 +223,7 @@ ContentstackUIExtension.init().then(function(extension) {
       });
   }
 
-  // Create entry - Navigate to Contentstack's native entry creation page
+  // Create entry - Navigate to Contentstack's native entry creation page in parent window
   function createEntry(contentTypeUid) {
     console.log("Creating entry for:", contentTypeUid);
 
@@ -236,7 +236,7 @@ ContentstackUIExtension.init().then(function(extension) {
     var baseUrl = "https://app.contentstack.com";
     var createUrl = baseUrl + "/#!/stack/" + apiKey + "/content-type/" + contentTypeUid + "/" + locale + "/entry/create";
 
-    console.log("Navigating to entry creation:", createUrl);
+    console.log("Navigating parent window to:", createUrl);
 
     // Store state to identify we're creating from this extension
     try {
@@ -246,15 +246,44 @@ ContentstackUIExtension.init().then(function(extension) {
         fieldUid: field.uid,
         parentEntryUid: currentEntryUid,
         parentContentType: extension.contentType,
-        returnUrl: window.location.href
+        locale: locale
       }));
-      console.log("Saved state to localStorage");
+      console.log("Saved state to localStorage:", {
+        contentType: contentTypeUid,
+        parentEntryUid: currentEntryUid,
+        fieldUid: field.uid
+      });
     } catch(e) {
       console.error("Could not save state:", e);
     }
 
-    // Navigate to entry creation in the same tab
-    window.location.href = createUrl;
+    // Try to navigate parent window
+    try {
+      if (window.parent && window.parent !== window) {
+        console.log("Attempting to navigate parent window");
+        window.parent.postMessage({
+          type: 'cs_navigate',
+          url: createUrl
+        }, 'https://app.contentstack.com');
+
+        // Also try direct assignment
+        setTimeout(function() {
+          try {
+            window.parent.location.href = createUrl;
+          } catch(ex) {
+            console.log("Parent location assignment blocked, using window.open");
+            // Fallback: open in new tab
+            window.open(createUrl, '_blank');
+          }
+        }, 100);
+      } else {
+        window.location.href = createUrl;
+      }
+    } catch(e) {
+      console.error("Navigation error:", e);
+      // Final fallback
+      window.open(createUrl, '_blank');
+    }
   }
 
   // Query for the latest entry and add to field
