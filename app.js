@@ -39,38 +39,6 @@ ContentstackUIExtension.init().then(function(extension) {
   renderEntries();
   extension.window.updateHeight();
 
-  // Check immediately on load
-  console.log("Extension initialized, checking for pending entry creation...");
-  setTimeout(function() {
-    checkForNewlyCreatedEntry();
-  }, 1000);
-
-  // Listen for popstate event (back button)
-  window.addEventListener('popstate', function(event) {
-    console.log("Popstate event detected (back button)");
-    setTimeout(function() {
-      checkForNewlyCreatedEntry();
-    }, 500);
-  });
-
-  // Listen for visibility change (tab becomes visible again)
-  document.addEventListener('visibilitychange', function() {
-    if (!document.hidden) {
-      console.log("Tab became visible, checking for new entries");
-      setTimeout(function() {
-        checkForNewlyCreatedEntry();
-      }, 500);
-    }
-  });
-
-  // Listen for focus event
-  window.addEventListener('focus', function() {
-    console.log("Window focused, checking for new entries");
-    setTimeout(function() {
-      checkForNewlyCreatedEntry();
-    }, 500);
-  });
-
   // Button handler - Create new entry
   btn.onclick = function() {
     // If only one content type referenced, use it directly
@@ -223,78 +191,259 @@ ContentstackUIExtension.init().then(function(extension) {
       });
   }
 
-  // Create entry - Navigate to Contentstack's native entry creation page in parent window
+  // Create entry - Fetch schema and show form modal
   function createEntry(contentTypeUid) {
     console.log("Creating entry for:", contentTypeUid);
 
-    var stackData = extensionField.stack.getData();
-    var apiKey = stackData.api_key;
-    var locale = extensionField.locale || 'en-us';
-    var currentEntryData = extension.entry.getData();
-    var currentEntryUid = currentEntryData.uid;
-    var parentContentType = extension.contentType;
+    // Show loading
+    var loading = document.createElement('div');
+    loading.innerHTML = '⏳ Loading content type schema...';
+    loading.id = 'schemaLoading';
+    loading.style.cssText = 'position: fixed; top: 16px; right: 16px; background: #647de8; color: white; padding: 12px 20px; border-radius: 4px; font-weight: 500; font-size: 13px; z-index: 100000; box-shadow: 0 4px 12px rgba(0,0,0,0.15);';
+    document.body.appendChild(loading);
 
-    // Build return URL - back to parent entry edit page
-    var baseUrl = "https://app.contentstack.com";
-    var returnUrl;
+    // Fetch content type schema to get all fields
+    extension.stack.ContentType(contentTypeUid).fetch()
+      .then(function(contentType) {
+        console.log("Content type schema:", contentType);
 
-    if (currentEntryUid) {
-      // Existing entry - return to edit page
-      returnUrl = baseUrl + "/#!/stack/" + apiKey + "/content-type/" + parentContentType + "/" + locale + "/entry/" + currentEntryUid + "/edit";
-    } else {
-      // New entry - return to create page
-      returnUrl = baseUrl + "/#!/stack/" + apiKey + "/content-type/" + parentContentType + "/" + locale + "/entry/create";
-    }
-
-    // Build entry creation URL with return URL parameter
-    var createUrl = baseUrl + "/#!/stack/" + apiKey + "/content-type/" + contentTypeUid + "/" + locale + "/entry/create?return_to=" + encodeURIComponent(returnUrl);
-
-    console.log("Parent entry URL:", returnUrl);
-    console.log("Create URL with return:", createUrl);
-
-    // Store state to identify we're creating from this extension
-    try {
-      localStorage.setItem('cs_ref_field_creating', JSON.stringify({
-        contentType: contentTypeUid,
-        timestamp: Date.now(),
-        fieldUid: field.uid,
-        parentEntryUid: currentEntryUid || 'new',
-        parentContentType: parentContentType,
-        locale: locale,
-        returnUrl: returnUrl
-      }));
-      console.log("Saved state to localStorage");
-    } catch(e) {
-      console.error("Could not save state:", e);
-    }
-
-    // Try to navigate parent window
-    try {
-      if (window.parent && window.parent !== window) {
-        console.log("Attempting to navigate parent window");
-
-        // Try direct assignment
-        try {
-          window.parent.location.href = createUrl;
-          console.log("Parent window navigation successful");
-        } catch(ex) {
-          console.log("Parent location assignment blocked:", ex);
-          // Fallback: open in same window (will still be in full context)
-          window.top.location.href = createUrl;
+        // Remove loading
+        if (document.getElementById('schemaLoading')) {
+          document.body.removeChild(loading);
         }
-      } else {
-        window.location.href = createUrl;
+
+        // Show entry creation form with all fields from schema
+        showEntryCreationForm(contentTypeUid, contentType);
+      })
+      .catch(function(error) {
+        console.error("Error fetching content type:", error);
+
+        // Remove loading
+        if (document.getElementById('schemaLoading')) {
+          document.body.removeChild(loading);
+        }
+
+        // Fallback: show basic form with common fields
+        console.log("Falling back to basic form");
+        showBasicEntryForm(contentTypeUid);
+      });
+  }
+
+  // Show entry creation form with dynamic fields from schema
+  function showEntryCreationForm(contentTypeUid, contentType) {
+    var schema = contentType.schema || [];
+    console.log("Building form with", schema.length, "fields");
+
+    // Create modal
+    var modal = document.createElement('div');
+    modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.7); z-index: 99999; display: flex; align-items: center; justify-content: center; overflow: auto;';
+
+    var container = document.createElement('div');
+    container.style.cssText = 'background: white; width: 90%; max-width: 800px; max-height: 90vh; display: flex; flex-direction: column; border-radius: 6px; box-shadow: 0 4px 20px rgba(0,0,0,0.3);';
+
+    // Header
+    var header = document.createElement('div');
+    header.style.cssText = 'padding: 20px 24px; border-bottom: 1px solid #e4e8ed; display: flex; justify-content: space-between; align-items: center; background: #fff;';
+
+    var title = document.createElement('h2');
+    title.textContent = 'Create New ' + (contentType.title || contentTypeUid);
+    title.style.cssText = 'margin: 0; font-size: 18px; font-weight: 600; color: #1f2937;';
+
+    var closeBtn = document.createElement('button');
+    closeBtn.innerHTML = '✕';
+    closeBtn.style.cssText = 'background: none; border: none; font-size: 24px; cursor: pointer; color: #647696; padding: 0; width: 32px; height: 32px;';
+    closeBtn.onclick = function() { document.body.removeChild(modal); };
+
+    header.appendChild(title);
+    header.appendChild(closeBtn);
+
+    // Form container
+    var formContainer = document.createElement('div');
+    formContainer.style.cssText = 'padding: 24px; overflow-y: auto; flex: 1;';
+
+    var form = document.createElement('form');
+    form.id = 'dynamicEntryForm';
+
+    // Build fields from schema
+    schema.forEach(function(fieldSchema) {
+      if (fieldSchema.uid === 'uid' || fieldSchema.uid === 'created_at' || fieldSchema.uid === 'updated_at') {
+        return; // Skip system fields
       }
-    } catch(e) {
-      console.error("Navigation error:", e);
-      // Final fallback - try window.top
-      try {
-        window.top.location.href = createUrl;
-      } catch(ex) {
-        console.error("All navigation methods failed");
-        alert("Unable to navigate. Please allow navigation or disable popup blockers.");
+
+      var fieldGroup = createDynamicField(fieldSchema);
+      if (fieldGroup) {
+        form.appendChild(fieldGroup);
+      }
+    });
+
+    formContainer.appendChild(form);
+
+    // Footer
+    var footer = document.createElement('div');
+    footer.style.cssText = 'padding: 16px 24px; border-top: 1px solid #e4e8ed; display: flex; justify-content: flex-end; gap: 12px; background: #f7f9fc;';
+
+    var cancelBtn = document.createElement('button');
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.type = 'button';
+    cancelBtn.className = 'cs-btn cs-btn-secondary';
+    cancelBtn.onclick = function() { document.body.removeChild(modal); };
+
+    var saveBtn = document.createElement('button');
+    saveBtn.innerHTML = '💾 Save & Add to Field';
+    saveBtn.type = 'button';
+    saveBtn.className = 'cs-btn cs-btn-primary';
+    saveBtn.onclick = function() { submitDynamicEntry(contentTypeUid, form, modal, saveBtn); };
+
+    footer.appendChild(cancelBtn);
+    footer.appendChild(saveBtn);
+
+    container.appendChild(header);
+    container.appendChild(formContainer);
+    container.appendChild(footer);
+    modal.appendChild(container);
+    document.body.appendChild(modal);
+
+    // Focus first input
+    setTimeout(function() {
+      var firstInput = form.querySelector('input, textarea');
+      if (firstInput) firstInput.focus();
+    }, 100);
+  }
+
+  // Create dynamic field based on schema
+  function createDynamicField(fieldSchema) {
+    var fieldType = fieldSchema.data_type;
+    var fieldUid = fieldSchema.uid;
+    var displayName = fieldSchema.display_name || fieldUid;
+    var mandatory = fieldSchema.mandatory || false;
+
+    var group = document.createElement('div');
+    group.style.cssText = 'margin-bottom: 20px;';
+
+    var label = document.createElement('label');
+    label.textContent = displayName + (mandatory ? ' *' : '');
+    label.style.cssText = 'display: block; margin-bottom: 8px; font-weight: 500; font-size: 13px; color: #475161;';
+
+    var input;
+
+    // Handle different field types
+    switch(fieldType) {
+      case 'text':
+        input = document.createElement(fieldSchema.field_metadata && fieldSchema.field_metadata.multiline ? 'textarea' : 'input');
+        if (input.tagName === 'TEXTAREA') {
+          input.rows = 3;
+        } else {
+          input.type = 'text';
+        }
+        break;
+      case 'number':
+        input = document.createElement('input');
+        input.type = 'number';
+        break;
+      case 'boolean':
+        input = document.createElement('input');
+        input.type = 'checkbox';
+        break;
+      case 'isodate':
+        input = document.createElement('input');
+        input.type = 'datetime-local';
+        break;
+      default:
+        input = document.createElement('input');
+        input.type = 'text';
+    }
+
+    input.name = fieldUid;
+    input.required = mandatory;
+    input.placeholder = fieldSchema.instruction || '';
+    input.style.cssText = 'width: 100%; padding: 10px 12px; border: 1px solid #dfe3e8; border-radius: 4px; font-size: 13px; color: #1f2937;';
+
+    if (fieldType === 'boolean') {
+      input.style.cssText = 'width: 18px; height: 18px; cursor: pointer; accent-color: #647de8;';
+    }
+
+    group.appendChild(label);
+    group.appendChild(input);
+
+    return group;
+  }
+
+  // Submit dynamically created entry
+  function submitDynamicEntry(contentTypeUid, form, modal, saveBtn) {
+    var formData = new FormData(form);
+    var entryData = { entry: {} };
+
+    for (var pair of formData.entries()) {
+      var value = pair[1];
+      var key = pair[0];
+
+      // Skip empty values
+      if (value === '' || value === null) continue;
+
+      // Handle checkbox
+      var input = form.querySelector('[name="' + key + '"]');
+      if (input && input.type === 'checkbox') {
+        entryData.entry[key] = input.checked;
+      } else {
+        entryData.entry[key] = value;
       }
     }
+
+    console.log('Creating entry with data:', entryData);
+
+    // Show loading
+    saveBtn.innerHTML = '⏳ Creating...';
+    saveBtn.disabled = true;
+    saveBtn.style.opacity = '0.7';
+
+    extension.stack.ContentType(contentTypeUid).Entry.create(entryData)
+      .then(function(result) {
+        console.log('Entry created successfully:', result);
+
+        var entry = result[0];
+        var newEntry = {
+          uid: entry.uid,
+          _content_type_uid: contentTypeUid
+        };
+
+        // Add to field
+        if (isMultiple) {
+          currentData.push(newEntry);
+        } else {
+          currentData = [newEntry];
+        }
+
+        return field.setData(currentData);
+      })
+      .then(function() {
+        document.body.removeChild(modal);
+        renderEntries();
+        extension.window.updateHeight();
+
+        // Success notification
+        var success = document.createElement('div');
+        success.innerHTML = '✓ Entry created and added successfully!';
+        success.style.cssText = 'position: fixed; top: 16px; right: 16px; background: #10b981; color: white; padding: 12px 20px; border-radius: 4px; font-weight: 500; font-size: 13px; z-index: 100000; box-shadow: 0 4px 12px rgba(0,0,0,0.15);';
+        document.body.appendChild(success);
+        setTimeout(function() {
+          if (document.body.contains(success)) {
+            document.body.removeChild(success);
+          }
+        }, 3000);
+      })
+      .catch(function(error) {
+        console.error('Error creating entry:', error);
+        alert('Error: ' + (error.error_message || error.message || 'Failed to create entry'));
+        saveBtn.innerHTML = '💾 Save & Add to Field';
+        saveBtn.disabled = false;
+        saveBtn.style.opacity = '1';
+      });
+  }
+
+  // Fallback: Show basic form if schema fetch fails
+  function showBasicEntryForm(contentTypeUid) {
+    alert("Note: Using basic form. For full content type fields, ensure proper SDK permissions.");
+    // Simple fallback can reuse createDynamicField with a basic schema
   }
 
   // Query for the latest entry and add to field
