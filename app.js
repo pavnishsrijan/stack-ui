@@ -87,7 +87,7 @@ ContentstackUIExtension.init().then(function(extension) {
     }
   });
 
-  // Create entry in specified content type - Open Contentstack's native form in modal
+  // Create entry in specified content type - Open Contentstack's native form
   function createEntry(contentTypeUid) {
     console.log("Opening create form for:", contentTypeUid);
     console.log("Using Stack API Key:", STACK_API_KEY);
@@ -106,48 +106,45 @@ ContentstackUIExtension.init().then(function(extension) {
 
     console.log("Opening URL:", createUrl);
 
-    // Create modal overlay
-    var modal = document.createElement('div');
-    modal.id = 'entryModal';
-    modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.5); z-index: 10000; display: flex; align-items: center; justify-content: center;';
+    // Open in a centered popup window (looks more like a modal)
+    var width = 1400;
+    var height = 900;
+    var left = (screen.width - width) / 2;
+    var top = (screen.height - height) / 2;
 
-    // Create iframe container
-    var container = document.createElement('div');
-    container.style.cssText = 'width: 90%; height: 90%; max-width: 1400px; background: white; border-radius: 8px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); position: relative; display: flex; flex-direction: column;';
+    var windowFeatures = 'width=' + width +
+                         ',height=' + height +
+                         ',left=' + left +
+                         ',top=' + top +
+                         ',resizable=yes' +
+                         ',scrollbars=yes' +
+                         ',status=no' +
+                         ',toolbar=no' +
+                         ',menubar=no' +
+                         ',location=no';
 
-    // Create close button
-    var closeBtn = document.createElement('button');
-    closeBtn.textContent = '✕ Close';
-    closeBtn.style.cssText = 'position: absolute; top: 10px; right: 10px; z-index: 10001; padding: 8px 16px; background: #ef4444; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 600;';
-    closeBtn.onclick = function() {
-      document.body.removeChild(modal);
-      // Query for the latest entry after closing
-      setTimeout(function() {
-        queryLatestEntry(contentTypeUid);
-      }, 500);
-    };
+    var popupWindow = window.open(createUrl, 'createEntry_' + Date.now(), windowFeatures);
 
-    // Create iframe
-    var iframe = document.createElement('iframe');
-    iframe.src = createUrl;
-    iframe.style.cssText = 'width: 100%; height: 100%; border: none; border-radius: 8px;';
-    iframe.setAttribute('allow', 'clipboard-read; clipboard-write');
+    if (!popupWindow) {
+      alert("Please allow popups for this site to create entries.\n\nClick on 'Create New Entry' again after enabling popups.");
+      return;
+    }
 
-    // Assemble modal
-    container.appendChild(closeBtn);
-    container.appendChild(iframe);
-    modal.appendChild(container);
-    document.body.appendChild(modal);
+    // Focus the popup
+    popupWindow.focus();
 
-    // Close on background click
-    modal.onclick = function(e) {
-      if (e.target === modal) {
-        document.body.removeChild(modal);
+    // Monitor when popup closes to query for latest entry
+    var checkInterval = setInterval(function() {
+      if (popupWindow.closed) {
+        clearInterval(checkInterval);
+        console.log("Popup closed - querying for latest entry");
+
+        // Query for the latest entry after a short delay
         setTimeout(function() {
           queryLatestEntry(contentTypeUid);
-        }, 500);
+        }, 1000);
       }
-    };
+    }, 500);
   }
 
   // Query for the latest entry created in a content type
