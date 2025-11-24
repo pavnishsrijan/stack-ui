@@ -4,50 +4,152 @@ ContentstackUIExtension.init().then(function(extension) {
   extensionField = extension;
   var field = extension.field;
   var btn = document.getElementById("createEntryBtn");
-  var valueBox = document.getElementById("selectedValue");
+  var entryList = document.getElementById("entryList");
+  var emptyState = document.getElementById("emptyState");
 
-  // Load existing data
-  var initValue = field.getData();
-  if (initValue) {
-    valueBox.style.display = "block";
-    valueBox.innerHTML = "<b>Selected Entry UID:</b><br>" + JSON.stringify(initValue);
+  // Get referenced content types from field schema
+  var fieldSchema = field.schema;
+  var referenceTo = fieldSchema.reference_to || [];
+  var isMultiple = fieldSchema.multiple || false;
+
+  console.log("Field Schema:", fieldSchema);
+  console.log("Reference To:", referenceTo);
+  console.log("Multiple:", isMultiple);
+
+  // Load existing data and display
+  var currentData = field.getData() || [];
+  if (!Array.isArray(currentData)) {
+    currentData = [];
   }
 
-  // Update height
+  renderEntries();
   extension.window.updateHeight();
 
-  // Button handler
+  // Button handler - Create new entry
   btn.onclick = function() {
-    var refCtUid = extension.config.content_type_uid;
-
-    if (!refCtUid) {
-      alert("ERROR: Missing content_type_uid in extension configuration.");
-      return;
+    // If only one content type referenced, use it directly
+    if (referenceTo.length === 1) {
+      createEntry(referenceTo[0]);
+    } else if (referenceTo.length > 1) {
+      // Multiple content types - show selection
+      showContentTypeSelector(referenceTo);
+    } else {
+      alert("ERROR: No content types configured for this reference field.");
     }
+  };
 
-    extension.stack.createEntry(refCtUid, {
+  // Create entry in specified content type
+  function createEntry(contentTypeUid) {
+    extension.stack.createEntry(contentTypeUid, {
       locale: extension.locale
     }).then(function(res) {
       if (!res || !res.data || !res.data.entry) {
-        alert("Entry creation failed.");
+        console.log("Entry creation cancelled or failed");
         return;
       }
 
-      var entryUid = res.data.entry.uid;
+      var newEntry = {
+        uid: res.data.entry.uid,
+        _content_type_uid: contentTypeUid
+      };
 
-      field.setData([{
-        uid: entryUid,
-        _content_type: refCtUid
-      }]).then(function() {
-        valueBox.style.display = "block";
-        valueBox.innerHTML = "<b>Selected Entry UID:</b><br>" + entryUid;
+      // Add to current data
+      if (isMultiple) {
+        currentData.push(newEntry);
+      } else {
+        currentData = [newEntry];
+      }
+
+      // Save to field
+      field.setData(currentData).then(function() {
+        renderEntries();
         extension.window.updateHeight();
       });
     }).catch(function(error) {
-      console.error("Error:", error);
+      console.error("Error creating entry:", error);
       alert("Failed to create entry.");
     });
-  };
+  }
+
+  // Show content type selector if multiple types
+  function showContentTypeSelector(contentTypes) {
+    var ctList = document.createElement("div");
+    ctList.className = "ct-selector";
+    ctList.innerHTML = "<h4>Select Content Type:</h4>";
+
+    contentTypes.forEach(function(ct) {
+      var ctBtn = document.createElement("button");
+      ctBtn.textContent = ct;
+      ctBtn.className = "ct-option";
+      ctBtn.onclick = function() {
+        document.body.removeChild(ctList);
+        createEntry(ct);
+      };
+      ctList.appendChild(ctBtn);
+    });
+
+    var cancelBtn = document.createElement("button");
+    cancelBtn.textContent = "Cancel";
+    cancelBtn.className = "ct-cancel";
+    cancelBtn.onclick = function() {
+      document.body.removeChild(ctList);
+    };
+    ctList.appendChild(cancelBtn);
+
+    document.body.appendChild(ctList);
+  }
+
+  // Remove entry from list
+  function removeEntry(index) {
+    currentData.splice(index, 1);
+    field.setData(currentData).then(function() {
+      renderEntries();
+      extension.window.updateHeight();
+    });
+  }
+
+  // Render entry list
+  function renderEntries() {
+    entryList.innerHTML = "";
+
+    if (currentData.length === 0) {
+      emptyState.style.display = "block";
+      entryList.style.display = "none";
+    } else {
+      emptyState.style.display = "none";
+      entryList.style.display = "block";
+
+      currentData.forEach(function(entry, index) {
+        var entryDiv = document.createElement("div");
+        entryDiv.className = "entry-item";
+
+        var entryInfo = document.createElement("div");
+        entryInfo.className = "entry-info";
+        entryInfo.innerHTML = "<strong>UID:</strong> " + entry.uid +
+                              "<br><strong>Content Type:</strong> " + entry._content_type_uid;
+
+        var removeBtn = document.createElement("button");
+        removeBtn.textContent = "Remove";
+        removeBtn.className = "remove-btn";
+        removeBtn.onclick = function() {
+          removeEntry(index);
+        };
+
+        entryDiv.appendChild(entryInfo);
+        entryDiv.appendChild(removeBtn);
+        entryList.appendChild(entryDiv);
+      });
+    }
+
+    // Hide button if single select and already has entry
+    if (!isMultiple && currentData.length > 0) {
+      btn.style.display = "none";
+    } else {
+      btn.style.display = "inline-block";
+    }
+  }
+
 }).catch(function(error) {
-  console.error('Init failed:', error);
+  console.error('Extension initialization failed:', error);
+  document.body.innerHTML = '<div style="color: red; padding: 20px;">Failed to initialize. Ensure this is running within Contentstack.</div>';
 });

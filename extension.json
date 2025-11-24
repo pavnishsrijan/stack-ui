@@ -1,13 +1,11 @@
 {
-  "title": "Create-only Reference Field",
+  "title": "Create-Only Reference Field",
   "type": "field",
-  "field_types": [
-    "reference"
-  ],
-  "description": "Replace the default reference field UI: hide 'Choose existing entry' and show 'Create new entry' popup.",
+  "data_type": "reference",
+  "multiple": true,
+  "description": "A custom reference field that only allows creating new entries (no 'Choose existing' option). Automatically detects referenced content types from field configuration.",
   "meta": {
-    "author": "your-name"
+    "author": "Custom Extensions Team"
   },
-  "src": "https://YOUR_HOSTING_URL/index.html",
-  "config": {}
+  "src": "https://YOUR_HOSTING_URL/index.html"
 }
