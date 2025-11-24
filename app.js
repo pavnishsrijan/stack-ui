@@ -90,32 +90,14 @@ ContentstackUIExtension.init().then(function(extension) {
   // Create entry in specified content type - Show custom entry form modal
   function createEntry(contentTypeUid) {
     console.log("Opening create form for:", contentTypeUid);
-    console.log("Using Stack API Key:", STACK_API_KEY);
 
-    if (!STACK_API_KEY) {
-      alert("Could not determine stack API key. Please check console.");
-      console.error("Stack data:", stackData);
-      return;
-    }
-
-    // First, fetch the content type schema to build the form
-    console.log("Fetching schema for:", contentTypeUid);
-
-    extension.stack.ContentType(contentTypeUid).fetch()
-      .then(function(contentType) {
-        console.log("Content Type fetched:", contentType);
-        showEntryFormModal(contentTypeUid, contentType);
-      })
-      .catch(function(error) {
-        console.error("Error fetching content type:", error);
-        alert("Could not load content type schema. Please try again.");
-      });
+    // Show modal with basic form (title field)
+    showEntryFormModal(contentTypeUid);
   }
 
   // Show modal with custom entry creation form
-  function showEntryFormModal(contentTypeUid, contentType) {
-    var schema = contentType[0] ? contentType[0].schema : contentType.schema;
-    console.log("Schema:", schema);
+  function showEntryFormModal(contentTypeUid) {
+    console.log("Creating form modal for:", contentTypeUid);
 
     // Create modal overlay
     var modal = document.createElement('div');
@@ -131,7 +113,7 @@ ContentstackUIExtension.init().then(function(extension) {
     modalHeader.style.cssText = 'padding: 20px; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; background: white; z-index: 10;';
 
     var title = document.createElement('h2');
-    title.textContent = 'Create New ' + (contentType[0] ? contentType[0].title : contentTypeUid);
+    title.textContent = 'Create New Entry - ' + contentTypeUid;
     title.style.cssText = 'margin: 0; font-size: 20px; font-weight: 600;';
 
     var closeBtn = document.createElement('button');
@@ -152,24 +134,23 @@ ContentstackUIExtension.init().then(function(extension) {
       saveEntry(contentTypeUid, form, modal);
     };
 
-    // Build form fields from schema
-    if (schema && schema.length > 0) {
-      schema.forEach(function(field) {
-        if (field.uid === 'title' || field.data_type === 'text' || field.data_type === 'number') {
-          var fieldGroup = createFormField(field);
-          form.appendChild(fieldGroup);
-        }
-      });
-    } else {
-      // Minimal form with just title
-      var titleField = createFormField({
-        uid: 'title',
-        display_name: 'Title',
-        data_type: 'text',
-        mandatory: true
-      });
-      form.appendChild(titleField);
-    }
+    // Build basic form with title field
+    var titleField = createFormField({
+      uid: 'title',
+      display_name: 'Title',
+      data_type: 'text',
+      mandatory: true
+    });
+    form.appendChild(titleField);
+
+    // Add URL field (common in most content types)
+    var urlField = createFormField({
+      uid: 'url',
+      display_name: 'URL',
+      data_type: 'text',
+      mandatory: false
+    });
+    form.appendChild(urlField);
 
     // Create modal footer with buttons
     var modalFooter = document.createElement('div');
