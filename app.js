@@ -87,7 +87,7 @@ ContentstackUIExtension.init().then(function(extension) {
     }
   });
 
-  // Create entry in specified content type - Open Contentstack's native form
+  // Create entry in specified content type - Open Contentstack's native form in modal
   function createEntry(contentTypeUid) {
     console.log("Opening create form for:", contentTypeUid);
     console.log("Using Stack API Key:", STACK_API_KEY);
@@ -100,46 +100,54 @@ ContentstackUIExtension.init().then(function(extension) {
 
     var locale = extension.locale || 'en-us';
 
-    // Build Contentstack entry creation URL with reference to this field
+    // Build Contentstack entry creation URL
     var baseUrl = "https://app.contentstack.com";
     var createUrl = baseUrl + "#!/stack/" + STACK_API_KEY + "/content-type/" + contentTypeUid + "/" + locale + "/entry/create";
 
     console.log("Opening URL:", createUrl);
 
-    // Open in popup
-    var width = 1200;
-    var height = 800;
-    var left = (screen.width - width) / 2;
-    var top = (screen.height - height) / 2;
+    // Create modal overlay
+    var modal = document.createElement('div');
+    modal.id = 'entryModal';
+    modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.5); z-index: 10000; display: flex; align-items: center; justify-content: center;';
 
-    var popupWindow = window.open(
-      createUrl,
-      'createEntry_' + Date.now(),
-      'width=' + width + ',height=' + height + ',left=' + left + ',top=' + top + ',toolbar=no,location=no,status=no,menubar=no,scrollbars=yes,resizable=yes'
-    );
+    // Create iframe container
+    var container = document.createElement('div');
+    container.style.cssText = 'width: 90%; height: 90%; max-width: 1400px; background: white; border-radius: 8px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); position: relative; display: flex; flex-direction: column;';
 
-    if (!popupWindow) {
-      alert("Please allow popups for this site to create entries.");
-      return;
-    }
+    // Create close button
+    var closeBtn = document.createElement('button');
+    closeBtn.textContent = '✕ Close';
+    closeBtn.style.cssText = 'position: absolute; top: 10px; right: 10px; z-index: 10001; padding: 8px 16px; background: #ef4444; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 600;';
+    closeBtn.onclick = function() {
+      document.body.removeChild(modal);
+      // Query for the latest entry after closing
+      setTimeout(function() {
+        queryLatestEntry(contentTypeUid);
+      }, 500);
+    };
 
-    // Listen for entry creation via watching URL changes (alternative method)
-    var checkInterval = setInterval(function() {
-      try {
-        if (popupWindow.closed) {
-          clearInterval(checkInterval);
-          console.log("Popup closed");
+    // Create iframe
+    var iframe = document.createElement('iframe');
+    iframe.src = createUrl;
+    iframe.style.cssText = 'width: 100%; height: 100%; border: none; border-radius: 8px;';
+    iframe.setAttribute('allow', 'clipboard-read; clipboard-write');
 
-          // Refresh field data in case entry was created
-          setTimeout(function() {
-            // Query the content type for the latest entry
-            queryLatestEntry(contentTypeUid);
-          }, 1000);
-        }
-      } catch (e) {
-        // Cross-origin, ignore
+    // Assemble modal
+    container.appendChild(closeBtn);
+    container.appendChild(iframe);
+    modal.appendChild(container);
+    document.body.appendChild(modal);
+
+    // Close on background click
+    modal.onclick = function(e) {
+      if (e.target === modal) {
+        document.body.removeChild(modal);
+        setTimeout(function() {
+          queryLatestEntry(contentTypeUid);
+        }, 500);
       }
-    }, 500);
+    };
   }
 
   // Query for the latest entry created in a content type
