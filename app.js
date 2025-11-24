@@ -36,24 +36,39 @@ ContentstackUIExtension.init().then(function(extension) {
     currentData = [];
   }
 
-  // Check if returning from entry creation (on page load)
-  checkForNewlyCreatedEntry();
-
   renderEntries();
   extension.window.updateHeight();
+
+  // Check immediately on load
+  console.log("Extension initialized, checking for pending entry creation...");
+  setTimeout(function() {
+    checkForNewlyCreatedEntry();
+  }, 1000);
 
   // Listen for popstate event (back button)
   window.addEventListener('popstate', function(event) {
     console.log("Popstate event detected (back button)");
-    checkForNewlyCreatedEntry();
+    setTimeout(function() {
+      checkForNewlyCreatedEntry();
+    }, 500);
   });
 
   // Listen for visibility change (tab becomes visible again)
   document.addEventListener('visibilitychange', function() {
     if (!document.hidden) {
       console.log("Tab became visible, checking for new entries");
-      checkForNewlyCreatedEntry();
+      setTimeout(function() {
+        checkForNewlyCreatedEntry();
+      }, 500);
     }
+  });
+
+  // Listen for focus event
+  window.addEventListener('focus', function() {
+    console.log("Window focused, checking for new entries");
+    setTimeout(function() {
+      checkForNewlyCreatedEntry();
+    }, 500);
   });
 
   // Button handler - Create new entry
@@ -68,6 +83,25 @@ ContentstackUIExtension.init().then(function(extension) {
       alert("ERROR: No content types configured for this reference field.");
     }
   };
+
+  // Debug button
+  var checkStateBtn = document.getElementById('checkStateBtn');
+  if (checkStateBtn) {
+    checkStateBtn.onclick = function() {
+      var state = localStorage.getItem('cs_ref_field_creating');
+      console.log("Current localStorage state:", state);
+      document.getElementById('debugText').textContent = state ? 'State found: ' + state : 'No state';
+      if (state) {
+        checkForNewlyCreatedEntry();
+      }
+    };
+  }
+
+  // Show debug info in development
+  var debugInfo = document.getElementById('debugInfo');
+  if (debugInfo) {
+    debugInfo.style.display = 'block';
+  }
 
   // Check if we're returning from entry creation
   function checkForNewlyCreatedEntry() {
