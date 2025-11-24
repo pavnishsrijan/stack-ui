@@ -7,10 +7,19 @@ ContentstackUIExtension.init().then(function(extension) {
   var entryList = document.getElementById("entryList");
   var emptyState = document.getElementById("emptyState");
 
-  // Debug: Log available methods
+  // Debug: Log available methods and data
   console.log("Extension object:", extension);
   console.log("Available stack methods:", extension.stack);
-  console.log("Available entry methods:", extension.entry);
+  console.log("Stack getData:", extension.stack ? extension.stack.getData() : null);
+  console.log("Content type:", extension.contentType);
+  console.log("Entry:", extension.entry);
+
+  // Get stack API key from extension
+  var stackData = extension.stack ? extension.stack.getData() : null;
+  var STACK_API_KEY = stackData ? stackData.api_key : null;
+
+  console.log("Stack API Key:", STACK_API_KEY);
+  console.log("Stack Data:", stackData);
 
   // Get referenced content types from field schema
   var fieldSchema = field.schema;
@@ -45,41 +54,30 @@ ContentstackUIExtension.init().then(function(extension) {
 
   // Create entry in specified content type - Open Contentstack's native form
   function createEntry(contentTypeUid) {
-    // Get stack API key from current URL
-    var currentUrl = window.parent.location.href;
-    var apiKeyMatch = currentUrl.match(/stack\/([^\/]+)/);
-    var apiKey = apiKeyMatch ? apiKeyMatch[1] : null;
-
-    // Fallback: try to get from extension.stack
-    if (!apiKey && extension.stack && extension.stack._data) {
-      apiKey = extension.stack._data.api_key;
-    }
-
     console.log("Opening create form for:", contentTypeUid);
-    console.log("API Key:", apiKey);
-    console.log("Stack object:", extension.stack);
+    console.log("Using Stack API Key:", STACK_API_KEY);
 
-    if (!apiKey) {
+    if (!STACK_API_KEY) {
       alert("Could not determine stack API key. Please check console.");
-      console.error("Stack object structure:", extension.stack);
+      console.error("Stack data:", stackData);
       return;
     }
 
     var locale = extension.locale || 'en-us';
 
     // Build Contentstack entry creation URL
-    var baseUrl = window.parent.location.origin; // https://app.contentstack.com
-    var createUrl = baseUrl + "#!/stack/" + apiKey + "/content-type/" + contentTypeUid + "/" + locale + "/entry/create";
+    var baseUrl = "https://app.contentstack.com";
+    var createUrl = baseUrl + "#!/stack/" + STACK_API_KEY + "/content-type/" + contentTypeUid + "/" + locale + "/entry/create";
 
     console.log("Opening URL:", createUrl);
 
-    // Open in popup via parent window
+    // Open in popup
     var width = 1200;
     var height = 800;
     var left = (screen.width - width) / 2;
     var top = (screen.height - height) / 2;
 
-    var popup = window.parent.open(
+    var popup = window.open(
       createUrl,
       'createEntry_' + Date.now(),
       'width=' + width + ',height=' + height + ',left=' + left + ',top=' + top + ',toolbar=no,location=no,status=no,menubar=no,scrollbars=yes,resizable=yes'
@@ -166,16 +164,7 @@ ContentstackUIExtension.init().then(function(extension) {
 
   // Open entry for editing
   function openEntry(contentTypeUid, entryUid) {
-    // Get stack API key from current URL
-    var currentUrl = window.parent.location.href;
-    var apiKeyMatch = currentUrl.match(/stack\/([^\/]+)/);
-    var apiKey = apiKeyMatch ? apiKeyMatch[1] : null;
-
-    if (!apiKey && extension.stack && extension.stack._data) {
-      apiKey = extension.stack._data.api_key;
-    }
-
-    if (!apiKey) {
+    if (!STACK_API_KEY) {
       alert("Could not determine stack API key.");
       return;
     }
@@ -183,8 +172,8 @@ ContentstackUIExtension.init().then(function(extension) {
     var locale = extension.locale || 'en-us';
 
     // Build Contentstack entry edit URL
-    var baseUrl = window.parent.location.origin;
-    var editUrl = baseUrl + "#!/stack/" + apiKey + "/content-type/" + contentTypeUid + "/" + locale + "/entry/" + entryUid + "/edit";
+    var baseUrl = "https://app.contentstack.com";
+    var editUrl = baseUrl + "#!/stack/" + STACK_API_KEY + "/content-type/" + contentTypeUid + "/" + locale + "/entry/" + entryUid + "/edit";
 
     console.log("Opening edit URL:", editUrl);
 
@@ -194,7 +183,7 @@ ContentstackUIExtension.init().then(function(extension) {
     var left = (screen.width - width) / 2;
     var top = (screen.height - height) / 2;
 
-    var popup = window.parent.open(
+    var popup = window.open(
       editUrl,
       'editEntry_' + entryUid,
       'width=' + width + ',height=' + height + ',left=' + left + ',top=' + top + ',toolbar=no,location=no,status=no,menubar=no,scrollbars=yes,resizable=yes'
