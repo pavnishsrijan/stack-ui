@@ -36,13 +36,24 @@ ContentstackUIExtension.init().then(function(extension) {
     currentData = [];
   }
 
+  // Check if returning from entry creation (on page load)
+  checkForNewlyCreatedEntry();
+
   renderEntries();
   extension.window.updateHeight();
 
-  // Listen for global entry saves to detect new entries created
-  extension.entry.onSave(function(savedEntry) {
-    console.log("Entry saved (global listener):", savedEntry);
+  // Listen for popstate event (back button)
+  window.addEventListener('popstate', function(event) {
+    console.log("Popstate event detected (back button)");
     checkForNewlyCreatedEntry();
+  });
+
+  // Listen for visibility change (tab becomes visible again)
+  document.addEventListener('visibilitychange', function() {
+    if (!document.hidden) {
+      console.log("Tab became visible, checking for new entries");
+      checkForNewlyCreatedEntry();
+    }
   });
 
   // Button handler - Create new entry
@@ -137,60 +148,38 @@ ContentstackUIExtension.init().then(function(extension) {
       });
   }
 
-  // Create entry - Open Contentstack's native entry creation page in new tab
+  // Create entry - Navigate to Contentstack's native entry creation page
   function createEntry(contentTypeUid) {
     console.log("Creating entry for:", contentTypeUid);
 
     var stackData = extensionField.stack.getData();
     var apiKey = stackData.api_key;
     var locale = extensionField.locale || 'en-us';
+    var currentEntryUid = extension.entry.getData().uid || 'new';
 
     // Build Contentstack entry creation URL
     var baseUrl = "https://app.contentstack.com";
     var createUrl = baseUrl + "/#!/stack/" + apiKey + "/content-type/" + contentTypeUid + "/" + locale + "/entry/create";
 
-    console.log("Opening entry creation:", createUrl);
+    console.log("Navigating to entry creation:", createUrl);
 
     // Store state to identify we're creating from this extension
     try {
       localStorage.setItem('cs_ref_field_creating', JSON.stringify({
         contentType: contentTypeUid,
         timestamp: Date.now(),
-        fieldUid: extensionField.field.uid,
-        parentEntryUid: extension.entry.getData().uid || 'new'
+        fieldUid: field.uid,
+        parentEntryUid: currentEntryUid,
+        parentContentType: extension.contentType,
+        returnUrl: window.location.href
       }));
+      console.log("Saved state to localStorage");
     } catch(e) {
-      console.warn("Could not save state:", e);
+      console.error("Could not save state:", e);
     }
 
-    // Open entry creation page in new window
-    var width = 1400;
-    var height = 900;
-    var left = (screen.width - width) / 2;
-    var top = (screen.height - height) / 2;
-
-    var popup = window.open(
-      createUrl,
-      'createEntry_' + contentTypeUid,
-      'width=' + width + ',height=' + height + ',left=' + left + ',top=' + top + ',toolbar=no,location=yes,status=no,menubar=no,scrollbars=yes,resizable=yes'
-    );
-
-    if (!popup) {
-      alert("Please allow popups for this site to create entries.");
-      return;
-    }
-
-    // Poll to detect when popup closes
-    var pollTimer = setInterval(function() {
-      if (popup.closed) {
-        clearInterval(pollTimer);
-        console.log("Entry creation window closed");
-        // Check for newly created entry after a short delay
-        setTimeout(function() {
-          checkForNewlyCreatedEntry();
-        }, 500);
-      }
-    }, 500);
+    // Navigate to entry creation in the same tab
+    window.location.href = createUrl;
   }
 
   // Query for the latest entry and add to field
