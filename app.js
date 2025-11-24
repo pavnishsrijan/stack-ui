@@ -230,13 +230,27 @@ ContentstackUIExtension.init().then(function(extension) {
     var stackData = extensionField.stack.getData();
     var apiKey = stackData.api_key;
     var locale = extensionField.locale || 'en-us';
-    var currentEntryUid = extension.entry.getData().uid || 'new';
+    var currentEntryData = extension.entry.getData();
+    var currentEntryUid = currentEntryData.uid;
+    var parentContentType = extension.contentType;
 
-    // Build Contentstack entry creation URL
+    // Build return URL - back to parent entry edit page
     var baseUrl = "https://app.contentstack.com";
-    var createUrl = baseUrl + "/#!/stack/" + apiKey + "/content-type/" + contentTypeUid + "/" + locale + "/entry/create";
+    var returnUrl;
 
-    console.log("Navigating parent window to:", createUrl);
+    if (currentEntryUid) {
+      // Existing entry - return to edit page
+      returnUrl = baseUrl + "/#!/stack/" + apiKey + "/content-type/" + parentContentType + "/" + locale + "/entry/" + currentEntryUid + "/edit";
+    } else {
+      // New entry - return to create page
+      returnUrl = baseUrl + "/#!/stack/" + apiKey + "/content-type/" + parentContentType + "/" + locale + "/entry/create";
+    }
+
+    // Build entry creation URL with return URL parameter
+    var createUrl = baseUrl + "/#!/stack/" + apiKey + "/content-type/" + contentTypeUid + "/" + locale + "/entry/create?return_to=" + encodeURIComponent(returnUrl);
+
+    console.log("Parent entry URL:", returnUrl);
+    console.log("Create URL with return:", createUrl);
 
     // Store state to identify we're creating from this extension
     try {
@@ -244,15 +258,12 @@ ContentstackUIExtension.init().then(function(extension) {
         contentType: contentTypeUid,
         timestamp: Date.now(),
         fieldUid: field.uid,
-        parentEntryUid: currentEntryUid,
-        parentContentType: extension.contentType,
-        locale: locale
+        parentEntryUid: currentEntryUid || 'new',
+        parentContentType: parentContentType,
+        locale: locale,
+        returnUrl: returnUrl
       }));
-      console.log("Saved state to localStorage:", {
-        contentType: contentTypeUid,
-        parentEntryUid: currentEntryUid,
-        fieldUid: field.uid
-      });
+      console.log("Saved state to localStorage");
     } catch(e) {
       console.error("Could not save state:", e);
     }
@@ -261,28 +272,28 @@ ContentstackUIExtension.init().then(function(extension) {
     try {
       if (window.parent && window.parent !== window) {
         console.log("Attempting to navigate parent window");
-        window.parent.postMessage({
-          type: 'cs_navigate',
-          url: createUrl
-        }, 'https://app.contentstack.com');
 
-        // Also try direct assignment
-        setTimeout(function() {
-          try {
-            window.parent.location.href = createUrl;
-          } catch(ex) {
-            console.log("Parent location assignment blocked, using window.open");
-            // Fallback: open in new tab
-            window.open(createUrl, '_blank');
-          }
-        }, 100);
+        // Try direct assignment
+        try {
+          window.parent.location.href = createUrl;
+          console.log("Parent window navigation successful");
+        } catch(ex) {
+          console.log("Parent location assignment blocked:", ex);
+          // Fallback: open in same window (will still be in full context)
+          window.top.location.href = createUrl;
+        }
       } else {
         window.location.href = createUrl;
       }
     } catch(e) {
       console.error("Navigation error:", e);
-      // Final fallback
-      window.open(createUrl, '_blank');
+      // Final fallback - try window.top
+      try {
+        window.top.location.href = createUrl;
+      } catch(ex) {
+        console.error("All navigation methods failed");
+        alert("Unable to navigate. Please allow navigation or disable popup blockers.");
+      }
     }
   }
 
