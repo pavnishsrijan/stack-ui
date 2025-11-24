@@ -35,6 +35,9 @@
       font-size: 14px;
     }
   </style>
+
+  <!-- Initialize extension in head to register handlers early -->
+  <script src="./app.js"></script>
 </head>
 
 <body>
@@ -43,7 +46,5 @@
   <button id="createEntryBtn">Create New Entry</button>
 
   <div id="selectedValue" class="value-box" style="display:none;"></div>
-
-  <script src="./app.js"></script>
 </body>
 </html>
