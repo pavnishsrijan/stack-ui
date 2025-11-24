@@ -52,279 +52,212 @@ ContentstackUIExtension.init().then(function(extension) {
     }
   };
 
-  // Debug button
-  var checkStateBtn = document.getElementById('checkStateBtn');
-  if (checkStateBtn) {
-    checkStateBtn.onclick = function() {
-      var state = localStorage.getItem('cs_ref_field_creating');
-      console.log("Current localStorage state:", state);
-      document.getElementById('debugText').textContent = state ? 'State found: ' + state : 'No state';
-      if (state) {
-        checkForNewlyCreatedEntry();
-      }
-    };
-  }
-
-  // Show debug info in development
-  var debugInfo = document.getElementById('debugInfo');
-  if (debugInfo) {
-    debugInfo.style.display = 'block';
-  }
-
-  // Check if we're returning from entry creation
-  function checkForNewlyCreatedEntry() {
-    try {
-      var savedState = localStorage.getItem('cs_ref_field_creating');
-      if (!savedState) {
-        console.log("No pending entry creation state found");
-        return;
-      }
-
-      var state = JSON.parse(savedState);
-      console.log("Found entry creation state:", state);
-
-      // Check if it's recent (within last 30 minutes)
-      var timeDiff = Date.now() - state.timestamp;
-      if (timeDiff > 30 * 60 * 1000) {
-        console.log("State is too old, removing");
-        localStorage.removeItem('cs_ref_field_creating');
-        return;
-      }
-
-      // Check if we're in the same parent entry
-      var currentEntryUid = extension.entry.getData().uid || 'new';
-      if (state.parentEntryUid !== currentEntryUid) {
-        console.log("Different parent entry, skipping");
-        return;
-      }
-
-      console.log("Returning from entry creation - querying latest entry");
-
-      // Clear the state immediately to prevent duplicate processing
-      localStorage.removeItem('cs_ref_field_creating');
-
-      // Query for the latest entry from the content type
-      queryLatestEntryAndAdd(state.contentType);
-    } catch(e) {
-      console.error("Error checking state:", e);
+  // Listen for messages from Contentstack about created entries
+  window.addEventListener('message', function(event) {
+    // Verify it's from Contentstack
+    if (event.origin !== 'https://app.contentstack.com') {
+      return;
     }
-  }
 
-  // Query latest entry and add to field
-  function queryLatestEntryAndAdd(contentTypeUid) {
-    console.log("Querying latest entry from content type:", contentTypeUid);
+    console.log("Received message:", event.data);
 
-    // Show loading indicator
-    var loading = document.createElement('div');
-    loading.innerHTML = '⏳ Loading created entry...';
-    loading.id = 'loadingIndicator';
-    loading.style.cssText = 'position: fixed; top: 16px; right: 16px; background: #647de8; color: white; padding: 12px 20px; border-radius: 4px; font-weight: 500; font-size: 13px; z-index: 100000; box-shadow: 0 4px 12px rgba(0,0,0,0.15);';
-    document.body.appendChild(loading);
+    // Check if it's an entry save event
+    if (event.data && event.data.type === 'entry-save' && event.data.entry) {
+      var savedEntry = event.data.entry;
+      console.log("Entry saved:", savedEntry);
 
-    extension.stack.ContentType(contentTypeUid).Entry.Query()
-      .limit(1)
-      .descending('created_at')
-      .find()
-      .then(function(result) {
-        // Remove loading indicator
-        if (document.getElementById('loadingIndicator')) {
-          document.body.removeChild(loading);
-        }
+      var newEntry = {
+        uid: savedEntry.uid,
+        _content_type_uid: savedEntry._content_type_uid || savedEntry.content_type_uid
+      };
 
-        if (result && result[0] && result[0][0]) {
-          var latestEntry = result[0][0];
-          console.log("Latest entry found:", latestEntry);
+      // Add to current data
+      if (isMultiple) {
+        currentData.push(newEntry);
+      } else {
+        currentData = [newEntry];
+      }
 
-          var newEntry = {
-            uid: latestEntry.uid,
-            _content_type_uid: contentTypeUid
-          };
-
-          // Add to field
-          if (isMultiple) {
-            // Check if already exists
-            var exists = currentData.some(function(e) {
-              return e.uid === latestEntry.uid;
-            });
-            if (!exists) {
-              currentData.push(newEntry);
-              console.log("Added new entry to multiple reference field");
-            } else {
-              console.log("Entry already exists in field");
-            }
-          } else {
-            currentData = [newEntry];
-            console.log("Set single reference field");
-          }
-
-          field.setData(currentData).then(function() {
-            console.log("Field data saved successfully");
-            renderEntries();
-            extension.window.updateHeight();
-
-            // Show success notification
-            var success = document.createElement('div');
-            success.innerHTML = '✓ Entry "' + (latestEntry.title || latestEntry.uid) + '" added successfully!';
-            success.style.cssText = 'position: fixed; top: 16px; right: 16px; background: #10b981; color: white; padding: 12px 20px; border-radius: 4px; font-weight: 500; font-size: 13px; z-index: 100000; box-shadow: 0 4px 12px rgba(0,0,0,0.15);';
-            document.body.appendChild(success);
-            setTimeout(function() {
-              if (document.body.contains(success)) {
-                document.body.removeChild(success);
-              }
-            }, 3500);
-          }).catch(function(err) {
-            console.error("Error saving field data:", err);
-            alert("Error: Could not save entry to field - " + err.message);
-          });
-        } else {
-          console.log("No entries found for content type:", contentTypeUid);
-          alert("No entry found. Please make sure you saved the entry before navigating back.");
-        }
-      })
-      .catch(function(error) {
-        // Remove loading indicator
-        if (document.getElementById('loadingIndicator')) {
-          document.body.removeChild(loading);
-        }
-        console.error("Error querying entries:", error);
-        alert("Error querying entries: " + (error.error_message || error.message));
+      // Save to field
+      field.setData(currentData).then(function() {
+        renderEntries();
+        extension.window.updateHeight();
+        console.log("Entry added to field:", newEntry);
       });
-  }
+    }
+  });
 
-  // Create entry - Show form modal with common fields
+  // Create entry - Show custom form in MAIN WINDOW using Contentstack branding
   function createEntry(contentTypeUid) {
     console.log("Creating entry for:", contentTypeUid);
-    showEntryCreationForm(contentTypeUid);
-  }
 
-  // Show entry creation form with common fields
-  function showEntryCreationForm(contentTypeUid) {
-    console.log("Showing entry creation form for:", contentTypeUid);
+    // Hide main UI
+    document.querySelector('.header').style.display = 'none';
+    emptyState.style.display = 'none';
+    entryList.style.display = 'none';
 
-    // Create modal
-    var modal = document.createElement('div');
-    modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.7); z-index: 99999; display: flex; align-items: center; justify-content: center; overflow: auto;';
+    // Create form container in main window
+    var formWrapper = document.createElement('div');
+    formWrapper.id = 'formWrapper';
+    formWrapper.style.cssText = 'background: #fff; padding: 0;';
 
-    var container = document.createElement('div');
-    container.style.cssText = 'background: white; width: 90%; max-width: 700px; max-height: 90vh; display: flex; flex-direction: column; border-radius: 6px; box-shadow: 0 4px 20px rgba(0,0,0,0.3);';
-
-    // Header
+    // Header with Contentstack branding
     var header = document.createElement('div');
-    header.style.cssText = 'padding: 20px 24px; border-bottom: 1px solid #e4e8ed; display: flex; justify-content: space-between; align-items: center; background: #fff;';
+    header.style.cssText = 'padding: 16px 20px; border-bottom: 1px solid #e4e8ed; display: flex; justify-content: space-between; align-items: center; background: #fff;';
+
+    var titleContainer = document.createElement('div');
+    titleContainer.style.cssText = 'display: flex; align-items: center; gap: 12px;';
+
+    var backIcon = document.createElement('span');
+    backIcon.innerHTML = '← ';
+    backIcon.style.cssText = 'font-size: 18px; color: #647de8; cursor: pointer;';
+    backIcon.onclick = function() {
+      document.body.removeChild(formWrapper);
+      document.querySelector('.header').style.display = 'flex';
+      renderEntries();
+      extension.window.updateHeight();
+    };
 
     var title = document.createElement('h2');
     title.textContent = 'Create New Entry';
-    title.style.cssText = 'margin: 0; font-size: 18px; font-weight: 600; color: #1f2937;';
+    title.style.cssText = 'margin: 0; font-size: 16px; font-weight: 600; color: #1f2937;';
 
-    var badge = document.createElement('span');
-    badge.textContent = contentTypeUid;
-    badge.style.cssText = 'padding: 4px 10px; background: #f0f3ff; color: #647de8; border-radius: 4px; font-size: 12px; font-weight: 500; margin-left: 12px;';
-    title.appendChild(badge);
+    var contentTypeBadge = document.createElement('span');
+    contentTypeBadge.textContent = contentTypeUid;
+    contentTypeBadge.style.cssText = 'padding: 4px 10px; background: #f0f3ff; color: #647de8; border-radius: 4px; font-size: 12px; font-weight: 500;';
 
-    var closeBtn = document.createElement('button');
-    closeBtn.innerHTML = '✕';
-    closeBtn.style.cssText = 'background: none; border: none; font-size: 24px; cursor: pointer; color: #647696; padding: 0; width: 32px; height: 32px;';
-    closeBtn.onclick = function() { document.body.removeChild(modal); };
+    titleContainer.appendChild(backIcon);
+    titleContainer.appendChild(title);
+    titleContainer.appendChild(contentTypeBadge);
+    header.appendChild(titleContainer);
 
-    header.appendChild(title);
-    header.appendChild(closeBtn);
-
-    // Form container
+    // Form container - COMPACT 2-COLUMN GRID (no scrolling)
     var formContainer = document.createElement('div');
-    formContainer.style.cssText = 'padding: 24px; overflow-y: auto; flex: 1;';
+    formContainer.style.cssText = 'padding: 24px 20px; background: #fff;';
 
     var form = document.createElement('form');
-    form.id = 'entryCreationForm';
+    form.id = 'entryForm';
+    form.style.cssText = 'display: grid; grid-template-columns: 1fr 1fr; gap: 16px 20px; max-width: 100%;';
 
-    // Common fields that most content types have
-    var commonFields = [
-      { label: 'Title *', name: 'title', type: 'text', required: true, placeholder: 'Enter title' },
-      { label: 'URL', name: 'url', type: 'text', placeholder: 'e.g., /my-page' },
-      { label: 'Description', name: 'description', type: 'textarea', rows: 3, placeholder: 'Enter description' }
+    // Compact fields with Contentstack styling
+    var fields = [
+      { label: 'Title *', name: 'title', type: 'text', required: true, placeholder: 'Enter title', span: 2 },
+      { label: 'URL', name: 'url', type: 'text', placeholder: 'e.g., /my-page', span: 2 },
+      { label: 'Description', name: 'description', type: 'textarea', placeholder: 'Enter description', span: 2, rows: 2 },
+      { label: 'Tags', name: 'tags', type: 'text', placeholder: 'Comma separated', span: 1 },
+      { label: 'Author', name: 'author', type: 'text', placeholder: 'Author name', span: 1 },
+      { label: 'Publish Date', name: 'publish_date', type: 'date', span: 1 },
+      { label: 'Priority', name: 'priority', type: 'number', placeholder: '0-10', span: 1 },
+      { label: 'Featured', name: 'featured', type: 'checkbox', span: 2 }
     ];
 
-    commonFields.forEach(function(fieldConfig) {
-      var fieldGroup = createSimpleField(fieldConfig);
+    fields.forEach(function(fieldConfig) {
+      var fieldGroup = createFormField(fieldConfig);
+      if (fieldConfig.span === 2) {
+        fieldGroup.style.gridColumn = 'span 2';
+      }
       form.appendChild(fieldGroup);
     });
 
     formContainer.appendChild(form);
 
-    // Footer
+    // Footer with Contentstack button styles
     var footer = document.createElement('div');
-    footer.style.cssText = 'padding: 16px 24px; border-top: 1px solid #e4e8ed; display: flex; justify-content: space-between; align-items: center; gap: 12px; background: #f7f9fc;';
+    footer.style.cssText = 'padding: 16px 20px; border-top: 1px solid #e4e8ed; display: flex; justify-content: space-between; align-items: center; background: #f7f9fc;';
 
-    var infoText = document.createElement('div');
-    infoText.textContent = '* Required fields';
-    infoText.style.cssText = 'font-size: 12px; color: #647696;';
+    var leftInfo = document.createElement('div');
+    leftInfo.style.cssText = 'color: #647696; font-size: 12px;';
+    leftInfo.textContent = '* Required fields';
 
-    var buttonGroup = document.createElement('div');
-    buttonGroup.style.cssText = 'display: flex; gap: 10px;';
+    var rightButtons = document.createElement('div');
+    rightButtons.style.cssText = 'display: flex; gap: 10px;';
 
     var cancelBtn = document.createElement('button');
     cancelBtn.textContent = 'Cancel';
     cancelBtn.type = 'button';
-    cancelBtn.className = 'cs-btn cs-btn-secondary';
-    cancelBtn.onclick = function() { document.body.removeChild(modal); };
+    cancelBtn.style.cssText = 'padding: 8px 20px; background: #fff; border: 1px solid #dfe3e8; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 500; color: #475161; transition: all 0.2s;';
+    cancelBtn.onmouseover = function() { this.style.borderColor = '#647de8'; this.style.color = '#647de8'; };
+    cancelBtn.onmouseout = function() { this.style.borderColor = '#dfe3e8'; this.style.color = '#475161'; };
+    cancelBtn.onclick = function() {
+      document.body.removeChild(formWrapper);
+      document.querySelector('.header').style.display = 'flex';
+      renderEntries();
+      extension.window.updateHeight();
+    };
 
     var saveBtn = document.createElement('button');
-    saveBtn.innerHTML = '💾 Save & Add to Field';
+    saveBtn.innerHTML = '💾 Save & Add';
     saveBtn.type = 'button';
-    saveBtn.className = 'cs-btn cs-btn-primary';
-    saveBtn.onclick = function() { submitEntry(contentTypeUid, form, modal, saveBtn); };
+    saveBtn.style.cssText = 'padding: 8px 20px; background: #647de8; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 600; transition: background 0.2s;';
+    saveBtn.onmouseover = function() { this.style.background = '#4f62d1'; };
+    saveBtn.onmouseout = function() { this.style.background = '#647de8'; };
+    saveBtn.onclick = function() { submitEntry(contentTypeUid, form, formWrapper, saveBtn); };
 
-    buttonGroup.appendChild(cancelBtn);
-    buttonGroup.appendChild(saveBtn);
+    rightButtons.appendChild(cancelBtn);
+    rightButtons.appendChild(saveBtn);
 
-    footer.appendChild(infoText);
-    footer.appendChild(buttonGroup);
+    footer.appendChild(leftInfo);
+    footer.appendChild(rightButtons);
 
-    container.appendChild(header);
-    container.appendChild(formContainer);
-    container.appendChild(footer);
-    modal.appendChild(container);
-    document.body.appendChild(modal);
+    // Assemble
+    formWrapper.appendChild(header);
+    formWrapper.appendChild(formContainer);
+    formWrapper.appendChild(footer);
+    document.body.appendChild(formWrapper);
 
-    // Focus first input
+    // Update height to fit content
     setTimeout(function() {
-      var firstInput = form.querySelector('input');
-      if (firstInput) firstInput.focus();
+      extension.window.updateHeight();
+      form.querySelector('input').focus();
     }, 100);
-
-    // ESC to close
-    var escHandler = function(e) {
-      if (e.key === 'Escape') {
-        document.body.removeChild(modal);
-        document.removeEventListener('keydown', escHandler);
-      }
-    };
-    document.addEventListener('keydown', escHandler);
   }
 
-  // Create simple form field
-  function createSimpleField(config) {
+  // Create form field with Contentstack styling
+  function createFormField(config) {
     var group = document.createElement('div');
-    group.style.cssText = 'margin-bottom: 20px;';
+    group.style.cssText = 'display: flex; flex-direction: column;';
 
-    var label = document.createElement('label');
-    label.textContent = config.label;
-    label.style.cssText = 'display: block; margin-bottom: 8px; font-weight: 500; font-size: 13px; color: #475161;';
+    var labelEl = document.createElement('label');
+    labelEl.textContent = config.label;
+    labelEl.style.cssText = 'display: block; margin-bottom: 6px; font-weight: 500; font-size: 13px; color: #475161;';
 
     var input;
+
     if (config.type === 'textarea') {
       input = document.createElement('textarea');
-      input.rows = config.rows || 4;
+      input.rows = config.rows || 3;
+      input.style.cssText = 'width: 100%; padding: 8px 12px; border: 1px solid #dfe3e8; border-radius: 4px; font-size: 13px; font-family: inherit; transition: all 0.2s; resize: vertical; color: #1f2937;';
+    } else if (config.type === 'checkbox') {
+      var checkboxContainer = document.createElement('div');
+      checkboxContainer.style.cssText = 'display: flex; align-items: center; gap: 8px; margin-top: 4px;';
+
+      input = document.createElement('input');
+      input.type = 'checkbox';
+      input.style.cssText = 'width: 16px; height: 16px; cursor: pointer; accent-color: #647de8;';
+
+      var checkLabel = document.createElement('span');
+      checkLabel.textContent = 'Enable';
+      checkLabel.style.cssText = 'font-size: 13px; color: #475161;';
+
+      checkboxContainer.appendChild(input);
+      checkboxContainer.appendChild(checkLabel);
+
+      group.appendChild(labelEl);
+      group.appendChild(checkboxContainer);
+
+      input.name = config.name;
+      return group;
     } else {
       input = document.createElement('input');
-      input.type = config.type || 'text';
+      input.type = config.type;
+      input.style.cssText = 'width: 100%; padding: 8px 12px; border: 1px solid #dfe3e8; border-radius: 4px; font-size: 13px; transition: all 0.2s; color: #1f2937;';
     }
 
     input.name = config.name;
     input.required = config.required || false;
     input.placeholder = config.placeholder || '';
-    input.style.cssText = 'width: 100%; padding: 10px 12px; border: 1px solid #dfe3e8; border-radius: 4px; font-size: 13px; color: #1f2937; font-family: inherit;';
 
-    // Focus effect
+    // Contentstack focus effects
     input.onfocus = function() {
       this.style.borderColor = '#647de8';
       this.style.boxShadow = '0 0 0 2px rgba(100, 125, 232, 0.1)';
@@ -334,14 +267,25 @@ ContentstackUIExtension.init().then(function(extension) {
       this.style.boxShadow = 'none';
     };
 
-    group.appendChild(label);
-    group.appendChild(input);
+    // Hover effects
+    input.onmouseover = function() {
+      if (document.activeElement !== this) {
+        this.style.borderColor = '#c1c7d0';
+      }
+    };
+    input.onmouseout = function() {
+      if (document.activeElement !== this) {
+        this.style.borderColor = '#dfe3e8';
+      }
+    };
 
+    group.appendChild(labelEl);
+    group.appendChild(input);
     return group;
   }
 
   // Submit entry
-  function submitEntry(contentTypeUid, form, modal, saveBtn) {
+  function submitEntry(contentTypeUid, form, formWrapper, saveBtn) {
     var formData = new FormData(form);
     var entryData = { entry: {} };
 
@@ -354,12 +298,12 @@ ContentstackUIExtension.init().then(function(extension) {
       return;
     }
 
-    console.log('Creating entry:', entryData);
-
     // Show loading
     saveBtn.innerHTML = '⏳ Creating...';
     saveBtn.disabled = true;
     saveBtn.style.opacity = '0.7';
+
+    console.log('Creating entry:', entryData);
 
     extension.stack.ContentType(contentTypeUid).Entry.create(entryData)
       .then(function(result) {
@@ -381,164 +325,30 @@ ContentstackUIExtension.init().then(function(extension) {
         return field.setData(currentData);
       })
       .then(function() {
-        document.body.removeChild(modal);
+        // Success - close form and update UI
+        document.body.removeChild(formWrapper);
+        document.querySelector('.header').style.display = 'flex';
         renderEntries();
         extension.window.updateHeight();
 
-        // Success notification
+        // Show Contentstack-style success notification
         var success = document.createElement('div');
-        success.innerHTML = '✓ Entry created and added successfully!';
+        success.innerHTML = '✓ Entry created successfully';
         success.style.cssText = 'position: fixed; top: 16px; right: 16px; background: #10b981; color: white; padding: 12px 20px; border-radius: 4px; font-weight: 500; font-size: 13px; z-index: 100000; box-shadow: 0 4px 12px rgba(0,0,0,0.15);';
         document.body.appendChild(success);
         setTimeout(function() {
           if (document.body.contains(success)) {
             document.body.removeChild(success);
           }
-        }, 3000);
+        }, 2500);
       })
       .catch(function(error) {
         console.error('Error:', error);
         alert('Error: ' + (error.error_message || error.message || 'Failed to create entry'));
-        saveBtn.innerHTML = '💾 Save & Add to Field';
+        saveBtn.innerHTML = '💾 Save & Add';
         saveBtn.disabled = false;
         saveBtn.style.opacity = '1';
       });
-  }
-
-  // Create dynamic field based on schema
-  function createDynamicField(fieldSchema) {
-    var fieldType = fieldSchema.data_type;
-    var fieldUid = fieldSchema.uid;
-    var displayName = fieldSchema.display_name || fieldUid;
-    var mandatory = fieldSchema.mandatory || false;
-
-    var group = document.createElement('div');
-    group.style.cssText = 'margin-bottom: 20px;';
-
-    var label = document.createElement('label');
-    label.textContent = displayName + (mandatory ? ' *' : '');
-    label.style.cssText = 'display: block; margin-bottom: 8px; font-weight: 500; font-size: 13px; color: #475161;';
-
-    var input;
-
-    // Handle different field types
-    switch(fieldType) {
-      case 'text':
-        input = document.createElement(fieldSchema.field_metadata && fieldSchema.field_metadata.multiline ? 'textarea' : 'input');
-        if (input.tagName === 'TEXTAREA') {
-          input.rows = 3;
-        } else {
-          input.type = 'text';
-        }
-        break;
-      case 'number':
-        input = document.createElement('input');
-        input.type = 'number';
-        break;
-      case 'boolean':
-        input = document.createElement('input');
-        input.type = 'checkbox';
-        break;
-      case 'isodate':
-        input = document.createElement('input');
-        input.type = 'datetime-local';
-        break;
-      default:
-        input = document.createElement('input');
-        input.type = 'text';
-    }
-
-    input.name = fieldUid;
-    input.required = mandatory;
-    input.placeholder = fieldSchema.instruction || '';
-    input.style.cssText = 'width: 100%; padding: 10px 12px; border: 1px solid #dfe3e8; border-radius: 4px; font-size: 13px; color: #1f2937;';
-
-    if (fieldType === 'boolean') {
-      input.style.cssText = 'width: 18px; height: 18px; cursor: pointer; accent-color: #647de8;';
-    }
-
-    group.appendChild(label);
-    group.appendChild(input);
-
-    return group;
-  }
-
-  // Submit dynamically created entry
-  function submitDynamicEntry(contentTypeUid, form, modal, saveBtn) {
-    var formData = new FormData(form);
-    var entryData = { entry: {} };
-
-    for (var pair of formData.entries()) {
-      var value = pair[1];
-      var key = pair[0];
-
-      // Skip empty values
-      if (value === '' || value === null) continue;
-
-      // Handle checkbox
-      var input = form.querySelector('[name="' + key + '"]');
-      if (input && input.type === 'checkbox') {
-        entryData.entry[key] = input.checked;
-      } else {
-        entryData.entry[key] = value;
-      }
-    }
-
-    console.log('Creating entry with data:', entryData);
-
-    // Show loading
-    saveBtn.innerHTML = '⏳ Creating...';
-    saveBtn.disabled = true;
-    saveBtn.style.opacity = '0.7';
-
-    extension.stack.ContentType(contentTypeUid).Entry.create(entryData)
-      .then(function(result) {
-        console.log('Entry created successfully:', result);
-
-        var entry = result[0];
-        var newEntry = {
-          uid: entry.uid,
-          _content_type_uid: contentTypeUid
-        };
-
-        // Add to field
-        if (isMultiple) {
-          currentData.push(newEntry);
-        } else {
-          currentData = [newEntry];
-        }
-
-        return field.setData(currentData);
-      })
-      .then(function() {
-        document.body.removeChild(modal);
-        renderEntries();
-        extension.window.updateHeight();
-
-        // Success notification
-        var success = document.createElement('div');
-        success.innerHTML = '✓ Entry created and added successfully!';
-        success.style.cssText = 'position: fixed; top: 16px; right: 16px; background: #10b981; color: white; padding: 12px 20px; border-radius: 4px; font-weight: 500; font-size: 13px; z-index: 100000; box-shadow: 0 4px 12px rgba(0,0,0,0.15);';
-        document.body.appendChild(success);
-        setTimeout(function() {
-          if (document.body.contains(success)) {
-            document.body.removeChild(success);
-          }
-        }, 3000);
-      })
-      .catch(function(error) {
-        console.error('Error creating entry:', error);
-        alert('Error: ' + (error.error_message || error.message || 'Failed to create entry'));
-        saveBtn.innerHTML = '💾 Save & Add to Field';
-        saveBtn.disabled = false;
-        saveBtn.style.opacity = '1';
-      });
-  }
-
-  // Fallback: Show basic form if schema fetch fails
-  function showBasicEntryForm(contentTypeUid) {
-    alert("Note: Using basic form. For full content type fields, ensure proper SDK permissions.");
-    // Simple fallback can reuse createDynamicField with a basic schema
   }
 
   // Query for the latest entry and add to field
