@@ -87,69 +87,94 @@ ContentstackUIExtension.init().then(function(extension) {
     }
   });
 
-  // Create entry - Show custom form in modal, create via API, auto-assign
+  // Create entry - Show custom form in FULL HEIGHT modal with all fields
   function createEntry(contentTypeUid) {
     console.log("Creating entry for:", contentTypeUid);
 
-    // Create fullscreen modal
+    // Create fullscreen modal (full height)
     var modal = document.createElement('div');
-    modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.8); z-index: 99999; display: flex; align-items: center; justify-content: center; padding: 20px;';
+    modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.85); z-index: 99999; display: flex; align-items: stretch; justify-content: center;';
 
-    // Modal container
+    // Modal container - FULL HEIGHT
     var container = document.createElement('div');
-    container.style.cssText = 'background: white; border-radius: 12px; width: 100%; max-width: 700px; max-height: 90vh; display: flex; flex-direction: column; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);';
+    container.style.cssText = 'background: white; width: 100%; max-width: 900px; height: 100vh; display: flex; flex-direction: column; box-shadow: 0 0 60px rgba(0,0,0,0.5);';
 
     // Header
     var header = document.createElement('div');
-    header.style.cssText = 'padding: 24px; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center;';
+    header.style.cssText = 'padding: 24px 32px; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center; background: #f9fafb;';
 
     var title = document.createElement('h2');
-    title.textContent = 'Create Entry: ' + contentTypeUid;
-    title.style.cssText = 'margin: 0; font-size: 20px; font-weight: 600; color: #111;';
+    title.textContent = 'Create New Entry: ' + contentTypeUid;
+    title.style.cssText = 'margin: 0; font-size: 22px; font-weight: 700; color: #111;';
 
     var closeBtn = document.createElement('button');
     closeBtn.innerHTML = '✕';
-    closeBtn.style.cssText = 'background: none; border: none; font-size: 28px; color: #999; cursor: pointer; padding: 0; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;';
+    closeBtn.style.cssText = 'background: #ef4444; color: white; border: none; font-size: 22px; cursor: pointer; padding: 8px; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 8px; transition: background 0.2s;';
+    closeBtn.onmouseover = function() { this.style.background = '#dc2626'; };
+    closeBtn.onmouseout = function() { this.style.background = '#ef4444'; };
     closeBtn.onclick = function() { document.body.removeChild(modal); };
 
     header.appendChild(title);
     header.appendChild(closeBtn);
 
-    // Form container
+    // Form container - scrollable, takes all available space
     var formContainer = document.createElement('div');
-    formContainer.style.cssText = 'padding: 24px; overflow-y: auto; flex: 1;';
+    formContainer.style.cssText = 'padding: 32px; overflow-y: auto; flex: 1; background: #fff;';
 
     var form = document.createElement('form');
     form.id = 'entryForm';
 
-    // Title field
-    var titleGroup = createField('Title *', 'title', 'text', true);
-    form.appendChild(titleGroup);
+    // All common fields with beautiful UI
+    var fields = [
+      { label: 'Title *', name: 'title', type: 'text', required: true, placeholder: 'Enter entry title' },
+      { label: 'URL', name: 'url', type: 'text', required: false, placeholder: 'e.g., /my-page' },
+      { label: 'Description', name: 'description', type: 'textarea', required: false, placeholder: 'Enter description' },
+      { label: 'Tags', name: 'tags', type: 'text', required: false, placeholder: 'Comma separated tags' },
+      { label: 'Author', name: 'author', type: 'text', required: false, placeholder: 'Author name' },
+      { label: 'Publish Date', name: 'publish_date', type: 'date', required: false },
+      { label: 'Featured', name: 'featured', type: 'checkbox', required: false },
+      { label: 'Priority', name: 'priority', type: 'number', required: false, placeholder: 'Enter priority (0-10)' }
+    ];
 
-    // URL field
-    var urlGroup = createField('URL', 'url', 'text', false);
-    form.appendChild(urlGroup);
+    fields.forEach(function(fieldConfig) {
+      var fieldGroup = createFormField(fieldConfig);
+      form.appendChild(fieldGroup);
+    });
 
     formContainer.appendChild(form);
 
-    // Footer
+    // Footer - sticky at bottom
     var footer = document.createElement('div');
-    footer.style.cssText = 'padding: 20px 24px; border-top: 1px solid #e5e7eb; display: flex; justify-content: flex-end; gap: 12px;';
+    footer.style.cssText = 'padding: 24px 32px; border-top: 2px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center; background: #f9fafb;';
+
+    var leftInfo = document.createElement('div');
+    leftInfo.style.cssText = 'color: #6b7280; font-size: 13px;';
+    leftInfo.textContent = '* Required fields';
+
+    var rightButtons = document.createElement('div');
+    rightButtons.style.cssText = 'display: flex; gap: 12px;';
 
     var cancelBtn = document.createElement('button');
     cancelBtn.textContent = 'Cancel';
     cancelBtn.type = 'button';
-    cancelBtn.style.cssText = 'padding: 10px 24px; background: #f3f4f6; border: none; border-radius: 8px; cursor: pointer; font-size: 15px; font-weight: 500; color: #374151;';
+    cancelBtn.style.cssText = 'padding: 12px 28px; background: #e5e7eb; border: none; border-radius: 8px; cursor: pointer; font-size: 15px; font-weight: 600; color: #374151; transition: background 0.2s;';
+    cancelBtn.onmouseover = function() { this.style.background = '#d1d5db'; };
+    cancelBtn.onmouseout = function() { this.style.background = '#e5e7eb'; };
     cancelBtn.onclick = function() { document.body.removeChild(modal); };
 
     var saveBtn = document.createElement('button');
     saveBtn.textContent = 'Save & Add to Field';
     saveBtn.type = 'button';
-    saveBtn.style.cssText = 'padding: 10px 24px; background: #2563eb; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 15px; font-weight: 600;';
+    saveBtn.style.cssText = 'padding: 12px 32px; background: #2563eb; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 15px; font-weight: 700; transition: background 0.2s; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);';
+    saveBtn.onmouseover = function() { this.style.background = '#1d4ed8'; };
+    saveBtn.onmouseout = function() { this.style.background = '#2563eb'; };
     saveBtn.onclick = function() { submitEntry(contentTypeUid, form, modal, saveBtn); };
 
-    footer.appendChild(cancelBtn);
-    footer.appendChild(saveBtn);
+    rightButtons.appendChild(cancelBtn);
+    rightButtons.appendChild(saveBtn);
+
+    footer.appendChild(leftInfo);
+    footer.appendChild(rightButtons);
 
     // Assemble
     container.appendChild(header);
@@ -163,29 +188,81 @@ ContentstackUIExtension.init().then(function(extension) {
       form.querySelector('input').focus();
     }, 100);
 
-    // Close on overlay click
-    modal.onclick = function(e) {
-      if (e.target === modal) document.body.removeChild(modal);
-    };
-    container.onclick = function(e) { e.stopPropagation(); };
+    // ESC to close
+    document.addEventListener('keydown', function escHandler(e) {
+      if (e.key === 'Escape') {
+        document.body.removeChild(modal);
+        document.removeEventListener('keydown', escHandler);
+      }
+    });
   }
 
-  // Create form field
-  function createField(label, name, type, required) {
+  // Create form field with all types support
+  function createFormField(config) {
     var group = document.createElement('div');
-    group.style.cssText = 'margin-bottom: 20px;';
+    group.style.cssText = 'margin-bottom: 24px;';
 
     var labelEl = document.createElement('label');
-    labelEl.textContent = label;
-    labelEl.style.cssText = 'display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px; color: #374151;';
+    labelEl.textContent = config.label;
+    labelEl.style.cssText = 'display: block; margin-bottom: 10px; font-weight: 600; font-size: 15px; color: #1f2937;';
 
-    var input = document.createElement('input');
-    input.type = type;
-    input.name = name;
-    input.required = required;
-    input.style.cssText = 'width: 100%; padding: 12px 16px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 15px; transition: border-color 0.2s;';
-    input.onfocus = function() { this.style.borderColor = '#2563eb'; };
-    input.onblur = function() { this.style.borderColor = '#e5e7eb'; };
+    var input;
+
+    if (config.type === 'textarea') {
+      input = document.createElement('textarea');
+      input.rows = 4;
+      input.style.cssText = 'width: 100%; padding: 12px 16px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 15px; font-family: inherit; transition: all 0.2s; resize: vertical;';
+    } else if (config.type === 'checkbox') {
+      var checkboxContainer = document.createElement('div');
+      checkboxContainer.style.cssText = 'display: flex; align-items: center; gap: 10px;';
+
+      input = document.createElement('input');
+      input.type = 'checkbox';
+      input.style.cssText = 'width: 20px; height: 20px; cursor: pointer;';
+
+      var checkLabel = document.createElement('span');
+      checkLabel.textContent = 'Yes';
+      checkLabel.style.cssText = 'font-size: 15px; color: #4b5563;';
+
+      checkboxContainer.appendChild(input);
+      checkboxContainer.appendChild(checkLabel);
+
+      group.appendChild(labelEl);
+      group.appendChild(checkboxContainer);
+
+      input.name = config.name;
+      return group;
+    } else {
+      input = document.createElement('input');
+      input.type = config.type;
+      input.style.cssText = 'width: 100%; padding: 12px 16px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 15px; transition: all 0.2s;';
+    }
+
+    input.name = config.name;
+    input.required = config.required || false;
+    input.placeholder = config.placeholder || '';
+
+    // Focus effects
+    input.onfocus = function() {
+      this.style.borderColor = '#2563eb';
+      this.style.boxShadow = '0 0 0 3px rgba(37, 99, 235, 0.1)';
+    };
+    input.onblur = function() {
+      this.style.borderColor = '#e5e7eb';
+      this.style.boxShadow = 'none';
+    };
+
+    // Hover effects
+    input.onmouseover = function() {
+      if (document.activeElement !== this) {
+        this.style.borderColor = '#d1d5db';
+      }
+    };
+    input.onmouseout = function() {
+      if (document.activeElement !== this) {
+        this.style.borderColor = '#e5e7eb';
+      }
+    };
 
     group.appendChild(labelEl);
     group.appendChild(input);
