@@ -52,6 +52,41 @@ ContentstackUIExtension.init().then(function(extension) {
     }
   };
 
+  // Listen for messages from Contentstack about created entries
+  window.addEventListener('message', function(event) {
+    // Verify it's from Contentstack
+    if (event.origin !== 'https://app.contentstack.com') {
+      return;
+    }
+
+    console.log("Received message:", event.data);
+
+    // Check if it's an entry save event
+    if (event.data && event.data.type === 'entry-save' && event.data.entry) {
+      var savedEntry = event.data.entry;
+      console.log("Entry saved:", savedEntry);
+
+      var newEntry = {
+        uid: savedEntry.uid,
+        _content_type_uid: savedEntry._content_type_uid || savedEntry.content_type_uid
+      };
+
+      // Add to current data
+      if (isMultiple) {
+        currentData.push(newEntry);
+      } else {
+        currentData = [newEntry];
+      }
+
+      // Save to field
+      field.setData(currentData).then(function() {
+        renderEntries();
+        extension.window.updateHeight();
+        console.log("Entry added to field:", newEntry);
+      });
+    }
+  });
+
   // Create entry in specified content type - Open Contentstack's native form
   function createEntry(contentTypeUid) {
     console.log("Opening create form for:", contentTypeUid);
@@ -65,7 +100,7 @@ ContentstackUIExtension.init().then(function(extension) {
 
     var locale = extension.locale || 'en-us';
 
-    // Build Contentstack entry creation URL
+    // Build Contentstack entry creation URL with reference to this field
     var baseUrl = "https://app.contentstack.com";
     var createUrl = baseUrl + "#!/stack/" + STACK_API_KEY + "/content-type/" + contentTypeUid + "/" + locale + "/entry/create";
 
@@ -77,51 +112,81 @@ ContentstackUIExtension.init().then(function(extension) {
     var left = (screen.width - width) / 2;
     var top = (screen.height - height) / 2;
 
-    var popup = window.open(
+    var popupWindow = window.open(
       createUrl,
       'createEntry_' + Date.now(),
       'width=' + width + ',height=' + height + ',left=' + left + ',top=' + top + ',toolbar=no,location=no,status=no,menubar=no,scrollbars=yes,resizable=yes'
     );
 
-    if (!popup) {
+    if (!popupWindow) {
       alert("Please allow popups for this site to create entries.");
       return;
     }
 
-    // Poll for popup close and get created entry
-    var pollTimer = setInterval(function() {
+    // Listen for entry creation via watching URL changes (alternative method)
+    var checkInterval = setInterval(function() {
       try {
-        if (popup.closed) {
-          clearInterval(pollTimer);
-          console.log("Popup closed - user may have created an entry");
+        if (popupWindow.closed) {
+          clearInterval(checkInterval);
+          console.log("Popup closed");
 
-          // Show input to manually add entry UID
+          // Refresh field data in case entry was created
           setTimeout(function() {
-            var entryUid = prompt("Entry created! Please paste the Entry UID here to add it to this field:");
-            if (entryUid && entryUid.trim()) {
-              var newEntry = {
-                uid: entryUid.trim(),
-                _content_type_uid: contentTypeUid
-              };
-
-              if (isMultiple) {
-                currentData.push(newEntry);
-              } else {
-                currentData = [newEntry];
-              }
-
-              field.setData(currentData).then(function() {
-                renderEntries();
-                extension.window.updateHeight();
-              });
-            }
-          }, 500);
+            // Query the content type for the latest entry
+            queryLatestEntry(contentTypeUid);
+          }, 1000);
         }
       } catch (e) {
-        // Popup might be on different domain
-        clearInterval(pollTimer);
+        // Cross-origin, ignore
       }
     }, 500);
+  }
+
+  // Query for the latest entry created in a content type
+  function queryLatestEntry(contentTypeUid) {
+    if (!extension.stack || !extension.stack.ContentType) {
+      console.log("Cannot query entries - method not available");
+      return;
+    }
+
+    console.log("Querying latest entry from:", contentTypeUid);
+
+    extension.stack.ContentType(contentTypeUid).Entry.Query()
+      .limit(1)
+      .descending('created_at')
+      .find()
+      .then(function(result) {
+        if (result && result[0] && result[0][0]) {
+          var latestEntry = result[0][0];
+          console.log("Latest entry found:", latestEntry);
+
+          // Ask user if they want to add this entry
+          var message = "Add the latest entry created?\n\n" +
+                        "UID: " + latestEntry.uid + "\n" +
+                        "Title: " + (latestEntry.title || 'Untitled');
+
+          if (confirm(message)) {
+            var newEntry = {
+              uid: latestEntry.uid,
+              _content_type_uid: contentTypeUid
+            };
+
+            if (isMultiple) {
+              currentData.push(newEntry);
+            } else {
+              currentData = [newEntry];
+            }
+
+            field.setData(currentData).then(function() {
+              renderEntries();
+              extension.window.updateHeight();
+            });
+          }
+        }
+      })
+      .catch(function(error) {
+        console.error("Error querying entries:", error);
+      });
   }
 
 
