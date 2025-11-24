@@ -87,206 +87,63 @@ ContentstackUIExtension.init().then(function(extension) {
     }
   });
 
-  // Create entry in specified content type - Show custom entry form modal
+  // Create entry - Open Contentstack's native entry creation form
   function createEntry(contentTypeUid) {
-    console.log("Opening create form for:", contentTypeUid);
+    console.log("Opening Contentstack entry form for:", contentTypeUid);
 
-    // Show modal with basic form (title field)
-    showEntryFormModal(contentTypeUid);
-  }
+    if (!STACK_API_KEY) {
+      alert("Could not determine stack API key.");
+      return;
+    }
 
-  // Show modal with custom entry creation form
-  function showEntryFormModal(contentTypeUid) {
-    console.log("Creating form modal for:", contentTypeUid);
+    var locale = extension.locale || 'en-us';
 
-    // Create modal overlay
-    var modal = document.createElement('div');
-    modal.className = 'entry-form-modal';
-    modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 10000; display: flex; align-items: center; justify-content: center; overflow: auto; padding: 20px;';
+    // Build Contentstack entry creation URL
+    var baseUrl = "https://app.contentstack.com";
+    var createUrl = baseUrl + "#!/stack/" + STACK_API_KEY + "/content-type/" + contentTypeUid + "/" + locale + "/entry/create";
 
-    // Create modal content
-    var modalContent = document.createElement('div');
-    modalContent.style.cssText = 'background: white; border-radius: 8px; width: 100%; max-width: 800px; max-height: 90vh; overflow: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.3);';
+    console.log("Opening URL:", createUrl);
 
-    // Create modal header
-    var modalHeader = document.createElement('div');
-    modalHeader.style.cssText = 'padding: 20px; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; background: white; z-index: 10;';
+    // Open in popup window
+    var width = 1400;
+    var height = 900;
+    var left = (screen.width - width) / 2;
+    var top = (screen.height - height) / 2;
 
-    var title = document.createElement('h2');
-    title.textContent = 'Create New Entry - ' + contentTypeUid;
-    title.style.cssText = 'margin: 0; font-size: 20px; font-weight: 600;';
+    var windowFeatures = 'width=' + width +
+                         ',height=' + height +
+                         ',left=' + left +
+                         ',top=' + top +
+                         ',resizable=yes' +
+                         ',scrollbars=yes' +
+                         ',status=yes' +
+                         ',toolbar=no' +
+                         ',menubar=no' +
+                         ',location=yes';
 
-    var closeBtn = document.createElement('button');
-    closeBtn.textContent = '✕';
-    closeBtn.style.cssText = 'background: none; border: none; font-size: 24px; cursor: pointer; color: #666; padding: 0; width: 32px; height: 32px;';
-    closeBtn.onclick = function() {
-      document.body.removeChild(modal);
-    };
+    var popupWindow = window.open(createUrl, 'createEntry_' + Date.now(), windowFeatures);
 
-    modalHeader.appendChild(title);
-    modalHeader.appendChild(closeBtn);
+    if (!popupWindow) {
+      alert("Please allow popups for this site.\n\nClick 'Create New Entry' again after allowing popups.");
+      return;
+    }
 
-    // Create form
-    var form = document.createElement('form');
-    form.style.cssText = 'padding: 20px;';
-    form.onsubmit = function(e) {
-      e.preventDefault();
-      saveEntry(contentTypeUid, form, modal);
-    };
+    popupWindow.focus();
 
-    // Build basic form with title field
-    var titleField = createFormField({
-      uid: 'title',
-      display_name: 'Title',
-      data_type: 'text',
-      mandatory: true
-    });
-    form.appendChild(titleField);
+    // Monitor popup and query for latest entry when closed
+    var checkInterval = setInterval(function() {
+      if (popupWindow.closed) {
+        clearInterval(checkInterval);
+        console.log("Popup closed - querying for latest entry");
 
-    // Add URL field (common in most content types)
-    var urlField = createFormField({
-      uid: 'url',
-      display_name: 'URL',
-      data_type: 'text',
-      mandatory: false
-    });
-    form.appendChild(urlField);
-
-    // Create modal footer with buttons
-    var modalFooter = document.createElement('div');
-    modalFooter.style.cssText = 'padding: 20px; border-top: 1px solid #e5e7eb; display: flex; justify-content: flex-end; gap: 12px; position: sticky; bottom: 0; background: white;';
-
-    var cancelBtn = document.createElement('button');
-    cancelBtn.textContent = 'Cancel';
-    cancelBtn.type = 'button';
-    cancelBtn.style.cssText = 'padding: 10px 20px; background: #f3f4f6; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500;';
-    cancelBtn.onclick = function() {
-      document.body.removeChild(modal);
-    };
-
-    var saveBtn = document.createElement('button');
-    saveBtn.textContent = 'Save & Add to Field';
-    saveBtn.type = 'submit';
-    saveBtn.style.cssText = 'padding: 10px 20px; background: #2563eb; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500;';
-
-    modalFooter.appendChild(cancelBtn);
-    modalFooter.appendChild(saveBtn);
-
-    // Assemble modal
-    modalContent.appendChild(modalHeader);
-    modalContent.appendChild(form);
-    modalContent.appendChild(modalFooter);
-    modal.appendChild(modalContent);
-    document.body.appendChild(modal);
-
-    // Close on background click
-    modal.onclick = function(e) {
-      if (e.target === modal) {
-        document.body.removeChild(modal);
+        setTimeout(function() {
+          queryLatestEntry(contentTypeUid);
+        }, 1000);
       }
-    };
-    modalContent.onclick = function(e) {
-      e.stopPropagation();
-    };
+    }, 500);
   }
 
-  // Create form field HTML
-  function createFormField(field) {
-    var fieldGroup = document.createElement('div');
-    fieldGroup.style.cssText = 'margin-bottom: 20px;';
-
-    var label = document.createElement('label');
-    label.textContent = field.display_name || field.uid;
-    if (field.mandatory) {
-      label.textContent += ' *';
-    }
-    label.style.cssText = 'display: block; margin-bottom: 8px; font-weight: 500; font-size: 14px;';
-
-    var input;
-    if (field.data_type === 'number') {
-      input = document.createElement('input');
-      input.type = 'number';
-    } else {
-      input = document.createElement('input');
-      input.type = 'text';
-    }
-
-    input.name = field.uid;
-    input.required = field.mandatory || false;
-    input.style.cssText = 'width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;';
-    input.placeholder = 'Enter ' + (field.display_name || field.uid);
-
-    fieldGroup.appendChild(label);
-    fieldGroup.appendChild(input);
-
-    return fieldGroup;
-  }
-
-  // Save entry via API
-  function saveEntry(contentTypeUid, form, modal) {
-    var formData = new FormData(form);
-    var entryData = {
-      entry: {}
-    };
-
-    // Build entry data from form
-    for (var pair of formData.entries()) {
-      entryData.entry[pair[0]] = pair[1];
-    }
-
-    console.log("Creating entry:", entryData);
-
-    // Show loading state
-    var saveBtn = form.querySelector('button[type="submit"]');
-    var originalText = saveBtn.textContent;
-    saveBtn.textContent = 'Saving...';
-    saveBtn.disabled = true;
-
-    // Create entry via API
-    extension.stack.ContentType(contentTypeUid).Entry.create(entryData)
-      .then(function(result) {
-        console.log("Entry created successfully:", result);
-
-        var createdEntry = result[0];
-        var newEntry = {
-          uid: createdEntry.uid,
-          _content_type_uid: contentTypeUid
-        };
-
-        // Add to current data
-        if (isMultiple) {
-          currentData.push(newEntry);
-        } else {
-          currentData = [newEntry];
-        }
-
-        // Save to field
-        return field.setData(currentData);
-      })
-      .then(function() {
-        console.log("Entry added to field successfully");
-
-        // Close modal
-        document.body.removeChild(modal);
-
-        // Update UI
-        renderEntries();
-        extension.window.updateHeight();
-
-        // Show success message
-        alert("Entry created and added successfully!");
-      })
-      .catch(function(error) {
-        console.error("Error creating entry:", error);
-        alert("Error creating entry: " + (error.error_message || error.message || "Unknown error"));
-
-        // Reset button
-        saveBtn.textContent = originalText;
-        saveBtn.disabled = false;
-      });
-  }
-
-  // Query for the latest entry created in a content type
+  // Query for the latest entry and add to field
   function queryLatestEntry(contentTypeUid) {
     if (!extension.stack || !extension.stack.ContentType) {
       console.log("Cannot query entries - method not available");
@@ -305,7 +162,7 @@ ContentstackUIExtension.init().then(function(extension) {
           console.log("Latest entry found:", latestEntry);
 
           // Ask user if they want to add this entry
-          var message = "Add the latest entry created?\n\n" +
+          var message = "Add this entry to the field?\n\n" +
                         "UID: " + latestEntry.uid + "\n" +
                         "Title: " + (latestEntry.title || 'Untitled');
 
@@ -324,8 +181,11 @@ ContentstackUIExtension.init().then(function(extension) {
             field.setData(currentData).then(function() {
               renderEntries();
               extension.window.updateHeight();
+              alert("Entry added successfully!");
             });
           }
+        } else {
+          console.log("No entries found");
         }
       })
       .catch(function(error) {
