@@ -502,15 +502,15 @@ ContentstackUIExtension.init().then(function(extension) {
         buttonGroup.className = "button-group";
 
         var editBtn = document.createElement("button");
-        editBtn.textContent = "Edit";
-        editBtn.className = "edit-btn";
+        editBtn.innerHTML = "✏️ Edit";
+        editBtn.className = "cs-btn cs-btn-secondary cs-btn-sm";
         editBtn.onclick = function() {
           openEntry(entry._content_type_uid, entry.uid);
         };
 
         var removeBtn = document.createElement("button");
-        removeBtn.textContent = "Remove";
-        removeBtn.className = "remove-btn";
+        removeBtn.innerHTML = "🗑️ Remove";
+        removeBtn.className = "cs-btn cs-btn-danger cs-btn-sm";
         removeBtn.onclick = function() {
           removeEntry(index);
         };
