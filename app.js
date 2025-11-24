@@ -43,107 +43,70 @@ ContentstackUIExtension.init().then(function(extension) {
     }
   };
 
-  // Create entry in specified content type
+  // Create entry in specified content type - Open Contentstack's native form
   function createEntry(contentTypeUid) {
-    // Check if method exists
-    if (!extension.stack) {
-      alert("Stack methods not available. Please check SDK version.");
-      console.error("extension.stack is undefined");
+    // Get stack configuration
+    var apiKey = extension.stack._connection.stack.api_key;
+    var orgUid = extension.stack._connection.stack.org_uid;
+
+    console.log("Opening create form for:", contentTypeUid);
+    console.log("API Key:", apiKey);
+    console.log("Org UID:", orgUid);
+
+    // Build Contentstack entry creation URL
+    var baseUrl = window.location.origin; // https://app.contentstack.com
+    var createUrl = baseUrl + "#!/stack/" + apiKey + "/content-type/" + contentTypeUid + "/en-us/entry/create";
+
+    console.log("Opening URL:", createUrl);
+
+    // Open in modal/popup
+    var width = 1200;
+    var height = 800;
+    var left = (screen.width - width) / 2;
+    var top = (screen.height - height) / 2;
+
+    var popup = window.open(
+      createUrl,
+      'createEntry',
+      'width=' + width + ',height=' + height + ',left=' + left + ',top=' + top + ',toolbar=no,location=no,status=no,menubar=no,scrollbars=yes,resizable=yes'
+    );
+
+    if (!popup) {
+      alert("Please allow popups for this site to create entries.");
       return;
     }
 
-    // Try different API methods based on what's available
-    var createMethod = null;
+    // Poll for popup close and get created entry
+    var pollTimer = setInterval(function() {
+      if (popup.closed) {
+        clearInterval(pollTimer);
+        console.log("Popup closed - user may have created an entry");
 
-    // Method 1: App SDK style (newer)
-    if (typeof extension.stack.createEntry === 'function') {
-      createMethod = 'createEntry';
-    }
-    // Method 2: ContentType.Entry.create style
-    else if (typeof extension.stack.ContentType === 'function') {
-      createMethod = 'ContentType';
-    }
-    // Method 3: Manual redirect to Contentstack entry creation page
-    else {
-      createMethod = 'redirect';
-    }
+        // Show input to manually add entry UID
+        setTimeout(function() {
+          var entryUid = prompt("Entry created! Please paste the Entry UID here to add it to this field:");
+          if (entryUid && entryUid.trim()) {
+            var newEntry = {
+              uid: entryUid.trim(),
+              _content_type_uid: contentTypeUid
+            };
 
-    console.log("Using create method:", createMethod);
+            if (isMultiple) {
+              currentData.push(newEntry);
+            } else {
+              currentData = [newEntry];
+            }
 
-    if (createMethod === 'createEntry') {
-      // App SDK method
-      extension.stack.createEntry(contentTypeUid, {
-        locale: extension.locale
-      }).then(handleEntryCreated).catch(handleError);
-    }
-    else if (createMethod === 'ContentType') {
-      // Classic SDK method
-      extension.stack.ContentType(contentTypeUid).Entry.create().then(handleEntryCreated).catch(handleError);
-    }
-    else {
-      // Fallback: Show instructions
-      showManualEntryCreation(contentTypeUid);
-    }
-  }
-
-  function handleEntryCreated(res) {
-    if (!res || !res.data || !res.data.entry) {
-      console.log("Entry creation cancelled or failed");
-      return;
-    }
-
-    var newEntry = {
-      uid: res.data.entry.uid,
-      _content_type_uid: res.data.entry._content_type_uid || res.data.content_type_uid
-    };
-
-    // Add to current data
-    if (isMultiple) {
-      currentData.push(newEntry);
-    } else {
-      currentData = [newEntry];
-    }
-
-    // Save to field
-    field.setData(currentData).then(function() {
-      renderEntries();
-      extension.window.updateHeight();
-    });
-  }
-
-  function handleError(error) {
-    console.error("Error creating entry:", error);
-    alert("Failed to create entry. Check console for details.");
-  }
-
-  function showManualEntryCreation(contentTypeUid) {
-    var message = "To create an entry:\n\n" +
-                  "1. Open Contentstack in a new tab\n" +
-                  "2. Go to Content Type: " + contentTypeUid + "\n" +
-                  "3. Create a new entry\n" +
-                  "4. Copy the entry UID\n" +
-                  "5. Enter it below";
-
-    var entryUid = prompt(message + "\n\nEnter Entry UID:");
-
-    if (entryUid && entryUid.trim()) {
-      var newEntry = {
-        uid: entryUid.trim(),
-        _content_type_uid: contentTypeUid
-      };
-
-      if (isMultiple) {
-        currentData.push(newEntry);
-      } else {
-        currentData = [newEntry];
+            field.setData(currentData).then(function() {
+              renderEntries();
+              extension.window.updateHeight();
+            });
+          }
+        }, 500);
       }
-
-      field.setData(currentData).then(function() {
-        renderEntries();
-        extension.window.updateHeight();
-      });
-    }
+    }, 500);
   }
+
 
   // Show content type selector if multiple types
   function showContentTypeSelector(contentTypes) {
@@ -184,16 +147,30 @@ ContentstackUIExtension.init().then(function(extension) {
 
   // Open entry for editing
   function openEntry(contentTypeUid, entryUid) {
-    extension.stack.openEntry({
-      content_type_uid: contentTypeUid,
-      uid: entryUid,
-      locale: extension.locale
-    }).then(function(result) {
-      console.log("Entry opened:", result);
-      // Entry form was opened, no action needed on close
-    }).catch(function(error) {
-      console.error("Error opening entry:", error);
-    });
+    var apiKey = extension.stack._connection.stack.api_key;
+    var locale = extension.locale || 'en-us';
+
+    // Build Contentstack entry edit URL
+    var baseUrl = window.location.origin;
+    var editUrl = baseUrl + "#!/stack/" + apiKey + "/content-type/" + contentTypeUid + "/" + locale + "/entry/" + entryUid + "/edit";
+
+    console.log("Opening edit URL:", editUrl);
+
+    // Open in popup
+    var width = 1200;
+    var height = 800;
+    var left = (screen.width - width) / 2;
+    var top = (screen.height - height) / 2;
+
+    var popup = window.open(
+      editUrl,
+      'editEntry_' + entryUid,
+      'width=' + width + ',height=' + height + ',left=' + left + ',top=' + top + ',toolbar=no,location=no,status=no,menubar=no,scrollbars=yes,resizable=yes'
+    );
+
+    if (!popup) {
+      alert("Please allow popups for this site to edit entries.");
+    }
   }
 
   // Render entry list
