@@ -8,7 +8,9 @@ A custom reference field extension for Contentstack that **only allows creating 
 ✅ **Auto-Detection** - Automatically reads referenced content types from field configuration
 ✅ **Multiple Content Types** - Shows selector if field references multiple content types
 ✅ **Single/Multiple Selection** - Supports both single and multiple reference modes
-✅ **Entry Management** - View and remove selected entries
+✅ **Entry Management** - View, edit, and remove selected entries
+✅ **Click to Edit** - Click anywhere on an entry card to open it for editing
+✅ **Edit Button** - Dedicated "Edit" button to modify referenced entries
 ✅ **Professional UI** - Clean, modern interface matching Contentstack design
 
 ## Files
@@ -37,41 +39,77 @@ Edit `extension.json` and update the `src` URL:
 
 ### 3. Install in Contentstack
 
+#### Option A: Upload via UI (Recommended)
+
 1. Go to **Settings → Extensions**
 2. Click **+ New Extension**
 3. Select **Custom Field**
-4. Choose **Upload** method:
-   - **Hosted**: Paste your `index.html` URL
-   - **Self-hosted**: Upload `index.html` directly (max 500KB)
+4. Fill in details:
+   - **Title**: Create-Only Reference Field
+   - **Field Data Type**: Reference
+   - **Multiple**: ✅ (Check if you want to support multiple entries)
+5. Choose hosting method:
+   - **Hosted (External)**: Paste your `index.html` URL
+   - **Self-hosted (Upload)**: Upload `index.html` directly (max 500KB)
+6. **No custom configuration needed** - Leave config empty
+7. Click **Save**
+
+#### Option B: Upload via CLI
+
+```bash
+csdx cm:stacks:export-to-app --alias <stack-alias>
+# Place extension.json in the extensions folder
+csdx cm:stacks:import-to-app --alias <stack-alias>
+```
 
 ### 4. Configure Field in Content Type
 
-1. Open your Content Type
-2. Add a **Reference** field (or edit existing one)
-3. In the field settings:
+This is where you configure which content types can be created!
+
+1. Go to **Content Models** → Select your content type
+2. Click **Edit** or **+ New Field**
+3. Add a **Reference** field:
+   - **Display Name**: e.g., "Related Products"
+   - **Unique ID**: e.g., "related_products"
    - **Data Type**: Reference
-   - **Select Content Types**: Choose which content types can be referenced
-   - **Multiple**: Enable if you want multiple entries
-4. Under **Extension** tab:
-   - Select your **Create-Only Reference Field** extension
+   - **Refer to**: ✅ **Select the content types** you want to allow creating
+     - Example: Check "Product", "Category", "Brand"
+     - The extension will detect these automatically!
+   - **Multiple**: ✅ Enable if you want multiple entries
+4. Go to the **Extension** tab:
+   - **Select Extension**: Choose "Create-Only Reference Field"
+5. Click **Save**
+
+**Important**: The content types you select in "Refer to" are what the extension will use. No additional configuration needed!
 
 ### 5. Test
 
 Open an entry and test the custom field:
-- Click "Create New Entry" button
+- Click **"Create New Entry"** button
 - If multiple content types are configured, select one
 - Entry creation modal opens
 - After saving, entry appears in the field
-- Use "Remove" button to delete references
+- Click on the entry card or **"Edit"** button to open/modify the entry
+- Use **"Remove"** button to delete references
 
 ## How It Works
 
 The extension:
 1. Reads `field.schema.reference_to` to get configured content types
 2. Creates entries using `extension.stack.createEntry(contentTypeUid)`
-3. Stores references in format: `[{ uid: "...", _content_type_uid: "..." }]`
-4. Supports both single and multiple selection modes
-5. Auto-updates UI and adjusts iframe height
+3. Opens entries for editing using `extension.stack.openEntry({ content_type_uid, uid })`
+4. Stores references in format: `[{ uid: "...", _content_type_uid: "..." }]`
+5. Supports both single and multiple selection modes
+6. Auto-updates UI and adjusts iframe height
+
+## User Actions
+
+| Action | What Happens |
+|--------|--------------|
+| Click "Create New Entry" | Opens creation modal for selected content type |
+| Click entry card (text area) | Opens the entry in edit mode |
+| Click "Edit" button | Opens the entry in edit mode |
+| Click "Remove" button | Removes the reference from the field |
 
 ## Configuration Options
 

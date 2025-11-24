@@ -108,6 +108,20 @@ ContentstackUIExtension.init().then(function(extension) {
     });
   }
 
+  // Open entry for editing
+  function openEntry(contentTypeUid, entryUid) {
+    extension.stack.openEntry({
+      content_type_uid: contentTypeUid,
+      uid: entryUid,
+      locale: extension.locale
+    }).then(function(result) {
+      console.log("Entry opened:", result);
+      // Entry form was opened, no action needed on close
+    }).catch(function(error) {
+      console.error("Error opening entry:", error);
+    });
+  }
+
   // Render entry list
   function renderEntries() {
     entryList.innerHTML = "";
@@ -128,6 +142,23 @@ ContentstackUIExtension.init().then(function(extension) {
         entryInfo.innerHTML = "<strong>UID:</strong> " + entry.uid +
                               "<br><strong>Content Type:</strong> " + entry._content_type_uid;
 
+        // Make entry info clickable to open/edit
+        entryInfo.style.cursor = "pointer";
+        entryInfo.onclick = function() {
+          openEntry(entry._content_type_uid, entry.uid);
+        };
+        entryInfo.title = "Click to edit entry";
+
+        var buttonGroup = document.createElement("div");
+        buttonGroup.className = "button-group";
+
+        var editBtn = document.createElement("button");
+        editBtn.textContent = "Edit";
+        editBtn.className = "edit-btn";
+        editBtn.onclick = function() {
+          openEntry(entry._content_type_uid, entry.uid);
+        };
+
         var removeBtn = document.createElement("button");
         removeBtn.textContent = "Remove";
         removeBtn.className = "remove-btn";
@@ -135,8 +166,11 @@ ContentstackUIExtension.init().then(function(extension) {
           removeEntry(index);
         };
 
+        buttonGroup.appendChild(editBtn);
+        buttonGroup.appendChild(removeBtn);
+
         entryDiv.appendChild(entryInfo);
-        entryDiv.appendChild(removeBtn);
+        entryDiv.appendChild(buttonGroup);
         entryList.appendChild(entryDiv);
       });
     }
