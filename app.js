@@ -7,6 +7,11 @@ ContentstackUIExtension.init().then(function(extension) {
   var entryList = document.getElementById("entryList");
   var emptyState = document.getElementById("emptyState");
 
+  // Debug: Log available methods
+  console.log("Extension object:", extension);
+  console.log("Available stack methods:", extension.stack);
+  console.log("Available entry methods:", extension.entry);
+
   // Get referenced content types from field schema
   var fieldSchema = field.schema;
   var referenceTo = fieldSchema.reference_to || [];
@@ -40,35 +45,104 @@ ContentstackUIExtension.init().then(function(extension) {
 
   // Create entry in specified content type
   function createEntry(contentTypeUid) {
-    extension.stack.createEntry(contentTypeUid, {
-      locale: extension.locale
-    }).then(function(res) {
-      if (!res || !res.data || !res.data.entry) {
-        console.log("Entry creation cancelled or failed");
-        return;
-      }
+    // Check if method exists
+    if (!extension.stack) {
+      alert("Stack methods not available. Please check SDK version.");
+      console.error("extension.stack is undefined");
+      return;
+    }
 
+    // Try different API methods based on what's available
+    var createMethod = null;
+
+    // Method 1: App SDK style (newer)
+    if (typeof extension.stack.createEntry === 'function') {
+      createMethod = 'createEntry';
+    }
+    // Method 2: ContentType.Entry.create style
+    else if (typeof extension.stack.ContentType === 'function') {
+      createMethod = 'ContentType';
+    }
+    // Method 3: Manual redirect to Contentstack entry creation page
+    else {
+      createMethod = 'redirect';
+    }
+
+    console.log("Using create method:", createMethod);
+
+    if (createMethod === 'createEntry') {
+      // App SDK method
+      extension.stack.createEntry(contentTypeUid, {
+        locale: extension.locale
+      }).then(handleEntryCreated).catch(handleError);
+    }
+    else if (createMethod === 'ContentType') {
+      // Classic SDK method
+      extension.stack.ContentType(contentTypeUid).Entry.create().then(handleEntryCreated).catch(handleError);
+    }
+    else {
+      // Fallback: Show instructions
+      showManualEntryCreation(contentTypeUid);
+    }
+  }
+
+  function handleEntryCreated(res) {
+    if (!res || !res.data || !res.data.entry) {
+      console.log("Entry creation cancelled or failed");
+      return;
+    }
+
+    var newEntry = {
+      uid: res.data.entry.uid,
+      _content_type_uid: res.data.entry._content_type_uid || res.data.content_type_uid
+    };
+
+    // Add to current data
+    if (isMultiple) {
+      currentData.push(newEntry);
+    } else {
+      currentData = [newEntry];
+    }
+
+    // Save to field
+    field.setData(currentData).then(function() {
+      renderEntries();
+      extension.window.updateHeight();
+    });
+  }
+
+  function handleError(error) {
+    console.error("Error creating entry:", error);
+    alert("Failed to create entry. Check console for details.");
+  }
+
+  function showManualEntryCreation(contentTypeUid) {
+    var message = "To create an entry:\n\n" +
+                  "1. Open Contentstack in a new tab\n" +
+                  "2. Go to Content Type: " + contentTypeUid + "\n" +
+                  "3. Create a new entry\n" +
+                  "4. Copy the entry UID\n" +
+                  "5. Enter it below";
+
+    var entryUid = prompt(message + "\n\nEnter Entry UID:");
+
+    if (entryUid && entryUid.trim()) {
       var newEntry = {
-        uid: res.data.entry.uid,
+        uid: entryUid.trim(),
         _content_type_uid: contentTypeUid
       };
 
-      // Add to current data
       if (isMultiple) {
         currentData.push(newEntry);
       } else {
         currentData = [newEntry];
       }
 
-      // Save to field
       field.setData(currentData).then(function() {
         renderEntries();
         extension.window.updateHeight();
       });
-    }).catch(function(error) {
-      console.error("Error creating entry:", error);
-      alert("Failed to create entry.");
-    });
+    }
   }
 
   // Show content type selector if multiple types
